@@ -29,7 +29,7 @@ bench --site pranera.site migrate               # imports the Form Script fixtur
 bench restart                                    # or restart `bench start`
 ```
 
-Open a lead in CRM and use **Convert (Wizard)**, or go to `/deal_wizard/<lead name>`.
+Open a lead in CRM and press **Convert to Deal**, or go to `/deal_wizard/<lead name>`.
 
 > **HTTPS.** Service workers (and therefore installing the PWA) only work on `https://` or on
 > `localhost`. Over plain `http://pranera.site:8002` the wizard works but is not installable.
@@ -134,24 +134,37 @@ and cleared after a successful conversion.
 ## Entry point from the Lead page
 
 `pranera_crm/fixtures/crm_form_script.json` installs a **CRM Form Script** ("Pranera Convert Wizard",
-`dt = CRM Lead`, `view = Form`) that adds a **Convert (Wizard)** action to the Lead page using CRM's
-`setupForm({ doc })` → `{ actions: [...] }` contract (hidden once the lead is converted). It is not marked
-*Standard*, so admins can edit or disable it. Note the fixture is re-synced on every `migrate`.
+`dt = CRM Lead`, `view = Form`) that makes the Lead page's **Convert to Deal** open the wizard:
 
-Form Scripts cannot hide CRM's stock **Convert to Deal** button, and we do not patch `apps/crm`. If you want
-the stock button to open the wizard instead, apply this optional one-line change **in both files** (it is
-*not* applied here, and **must be re-applied after every CRM upgrade**):
+* It adds a **Convert to Deal** action (CRM's `setupForm({ doc })` → `{ actions: [...] }` contract) that
+  navigates to `/deal_wizard/<lead>`. It is omitted once the lead is converted.
+* CRM's own **Convert to Deal** button is **hidden**. A Form Script has no API to remove built-in buttons, so the
+  script hides it in the DOM (a `MutationObserver` on `div.inline-flex > button` whose label is
+  `Convert` / `Convert to Deal`; CRM wraps only that button in a Tooltip `div.inline-flex`). Nothing in
+  `apps/crm` is modified.
+* On phones CRM folds custom actions into the "⋯" menu, so **Convert to Deal** lives there.
+* The action uses CRM's default custom-action button style (a Form Script cannot restyle it).
 
-`apps/crm/frontend/src/pages/Lead.vue` (≈ line 321) and `apps/crm/frontend/src/pages/MobileLead.vue` (≈ line 391):
+The script is not marked *Standard*, so admins can edit or disable it (disabling it and reloading restores CRM's
+button). The fixture is re-synced on every `migrate`. Because the hiding relies on CRM's current markup, re-check
+it after CRM upgrades. If it ever stops matching, the stock button simply reappears (nothing breaks).
+
+The bulk *Convert to Deal* on the Leads list is not affected.
+
+### Sturdier alternative: patch CRM's own button
+
+If you prefer to change CRM's source instead of hiding a DOM node (this is **not** applied here, and **must be
+re-applied after every CRM upgrade**), make this one-line change in both `apps/crm/frontend/src/pages/Lead.vue`
+(≈ line 321) and `apps/crm/frontend/src/pages/MobileLead.vue` (≈ line 391):
 
 ```diff
 -const showConvertToDealModal = ref(false)
 +const showConvertToDealModal = computed({ get: () => false, set: () => window.location.assign(`/deal_wizard/${encodeURIComponent(props.leadId)}`) })
 ```
 
-The template's `@click="showConvertToDealModal = true"` then navigates to the wizard and the modal never
-renders. Rebuild CRM's frontend afterwards (`cd apps/crm/frontend && yarn build`). Bulk convert from the Leads
-list is not affected.
+The template's `@click="showConvertToDealModal = true"` then navigates to the wizard and the modal never renders;
+rebuild CRM's frontend afterwards (`cd apps/crm/frontend && yarn build`). If you do this, disable the
+"Pranera Convert Wizard" Form Script so there aren't two buttons.
 
 ## Tests
 
@@ -169,7 +182,7 @@ context permissions/candidates, and `whoami`. They run inside the test transacti
 
 ## Manual verification checklist
 
-1. **Desktop, end to end.** Open an unconverted lead → *Convert (Wizard)*. Step through the four steps (dots at the top show progress), use *Back*, the
+1. **Desktop, end to end.** Open an unconverted lead → *Convert to Deal* (CRM's own button is hidden; on a phone it is in the ⋯ menu). Step through the four steps (dots at the top show progress), use *Back*, the
    browser back button and a page reload (step and values must survive). Press *Convert to Deal*; you land on
    `/crm/deals/<name>` and the lead shows as converted. Re-open `/deal_wizard/<lead>`: it says the lead is
    already converted and links to the deal.
