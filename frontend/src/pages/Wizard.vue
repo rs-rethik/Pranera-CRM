@@ -1,136 +1,84 @@
 <template>
-  <div class="flex min-h-dvh flex-col bg-surface-gray-1">
-    <AppHeader :subtitle="subtitle" :back-href="leadHref" back-label="Back to lead" />
+  <main
+    class="min-h-dvh bg-surface-white px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-[max(2rem,env(safe-area-inset-top))] sm:pt-[8vh]"
+  >
+    <div class="mx-auto w-full max-w-md">
+      <StepDots v-if="active" :total="STEPS.length" :current="stepIndex" />
 
-    <div
-      v-if="!online"
-      class="flex items-center justify-center gap-2 bg-surface-amber-2 px-4 py-2 text-sm text-ink-amber-3"
-      role="status"
-    >
-      <span class="lucide-wifi-off size-4" />
-      You're offline. You can keep editing (your draft is saved on this device), but converting needs a connection.
-    </div>
+      <div class="rounded-lg border border-outline-gray-2 bg-surface-white p-5 sm:px-10 sm:py-8">
+        <LoadingText v-if="loading" class="justify-center" text="Loading…" />
 
-    <main class="mx-auto w-full max-w-2xl flex-1 px-4 pb-6 pt-4 sm:pt-8">
-      <!-- loading -->
-      <div v-if="loading" class="animate-pulse space-y-4" aria-busy="true" aria-label="Loading lead">
-        <div class="h-6 w-1/2 rounded bg-surface-gray-3" />
-        <div class="h-64 rounded-xl bg-surface-gray-2" />
-      </div>
-
-      <!-- couldn't load -->
-      <div v-else-if="loadError" class="space-y-4">
-        <NoticeBanner tone="error">{{ loadError }}</NoticeBanner>
-        <div class="flex gap-2">
-          <Button variant="subtle" @click="load">Try again</Button>
-          <a :href="crmHref"><Button variant="ghost">Open CRM</Button></a>
+        <!-- couldn't load -->
+        <div v-else-if="loadError" class="space-y-4">
+          <ErrorMessage :message="loadError" />
+          <div class="flex justify-end gap-2">
+            <a :href="crmHref"><Button variant="subtle">Open CRM</Button></a>
+            <Button variant="solid" @click="load">Try again</Button>
+          </div>
         </div>
-      </div>
 
-      <!-- already converted -->
-      <StatusCard
-        v-else-if="wizard.ctx?.converted"
-        icon="lucide-circle-check"
-        title="This lead is already converted"
-        :text="
-          wizard.ctx.deal
-            ? `It was converted to deal ${wizard.ctx.deal}.`
-            : 'It has already been converted to a deal.'
-        "
-      >
-        <a v-if="wizard.ctx.deal" :href="dealHref(wizard.ctx.deal)">
-          <Button variant="solid" size="lg">Open deal</Button>
-        </a>
-        <a v-else :href="leadHref"><Button variant="solid" size="lg">Open lead</Button></a>
-      </StatusCard>
+        <!-- already converted -->
+        <div v-else-if="wizard.ctx?.converted" class="space-y-4 text-center">
+          <h2 class="text-xl font-semibold text-ink-gray-9">Already converted</h2>
+          <p class="text-base text-ink-gray-6">
+            {{ wizard.ctx.deal ? `This lead was converted to deal ${wizard.ctx.deal}.` : 'This lead has already been converted.' }}
+          </p>
+          <a :href="wizard.ctx.deal ? dealHref(wizard.ctx.deal) : leadHref">
+            <Button variant="solid">{{ wizard.ctx.deal ? 'Open deal' : 'Open lead' }}</Button>
+          </a>
+        </div>
 
-      <StatusCard
-        v-else-if="wizard.ctx?.lost"
-        icon="lucide-circle-x"
-        title="This lead can't be converted"
-        text="Leads with a lost status can't be converted. Change the status in CRM first."
-      >
-        <a :href="leadHref"><Button variant="solid" size="lg">Open lead</Button></a>
-      </StatusCard>
+        <div v-else-if="wizard.ctx?.lost" class="space-y-4 text-center">
+          <h2 class="text-xl font-semibold text-ink-gray-9">Can't convert</h2>
+          <p class="text-base text-ink-gray-6">Leads with a lost status can't be converted.</p>
+          <a :href="leadHref"><Button variant="solid">Open lead</Button></a>
+        </div>
 
-      <StatusCard
-        v-else-if="wizard.ctx && !wizard.ctx.can_write"
-        icon="lucide-lock"
-        title="You can't convert this lead"
-        text="You have read-only access to this lead."
-      >
-        <a :href="leadHref"><Button variant="solid" size="lg">Open lead</Button></a>
-      </StatusCard>
+        <div v-else-if="wizard.ctx && !wizard.ctx.can_write" class="space-y-4 text-center">
+          <h2 class="text-xl font-semibold text-ink-gray-9">Can't convert</h2>
+          <p class="text-base text-ink-gray-6">You have read-only access to this lead.</p>
+          <a :href="leadHref"><Button variant="solid">Open lead</Button></a>
+        </div>
 
-      <!-- the wizard -->
-      <template v-else-if="active">
-        <StepIndicator :steps="STEPS" :current="stepIndex" :reachable="reachable" @select="goTo" />
+        <!-- the wizard -->
+        <template v-else-if="active">
+          <p v-if="draftInfo" class="mb-4 text-sm text-ink-gray-5">
+            Draft restored from {{ savedAgo(draftInfo.savedAt) }}.
+            <span v-if="draftInfo.leadChanged">The lead has changed since, so check the values.</span>
+            <button type="button" class="underline" @click="startOver">Start over</button>
+          </p>
 
-        <NoticeBanner v-if="draftInfo" class="mt-4">
-          Draft restored from {{ savedAgo(draftInfo.savedAt) }}.
-          <span v-if="draftInfo.leadChanged">The lead has changed since then, so please double-check the values.</span>
-          <template #action>
-            <div class="flex shrink-0 gap-1">
-              <Button size="sm" variant="ghost" @click="startOver">Start over</Button>
-              <Button size="sm" variant="ghost" aria-label="Dismiss" @click="draftInfo = null">
-                <span class="lucide-x size-4" />
-              </Button>
-            </div>
-          </template>
-        </NoticeBanner>
-
-        <section class="mt-4 rounded-xl border border-outline-gray-2 bg-surface-white p-4 sm:p-6">
           <component :is="STEP_COMPONENTS[stepIndex]" @edit="goTo" />
-        </section>
 
-        <NoticeBanner v-if="submitError" ref="errorBox" tone="error" class="mt-4">
-          {{ submitError }}
-        </NoticeBanner>
-      </template>
-    </main>
+          <p v-if="!online" class="mt-4 text-sm text-ink-amber-3" role="status">
+            You're offline. Your draft is saved on this device; reconnect to convert.
+          </p>
+          <div ref="errorBox"><ErrorMessage class="mt-4" :message="submitError" /></div>
 
-    <footer
-      v-if="active"
-      class="sticky bottom-0 z-10 border-t border-outline-gray-2 bg-surface-white px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
-    >
-      <div class="mx-auto flex w-full max-w-2xl gap-3">
-        <Button v-if="stepIndex > 0" class="!h-12 px-5" size="lg" variant="outline" :disabled="submitting" @click="back">
-          Back
-        </Button>
-        <Button v-if="!isLast" class="!h-12 flex-1" size="lg" variant="solid" @click="next">Next</Button>
-        <Button
-          v-else
-          class="!h-12 flex-1"
-          size="lg"
-          variant="solid"
-          :loading="submitting"
-          :disabled="!online || submitting"
-          @click="submit"
-        >
-          Convert to Deal
-        </Button>
+          <div class="mt-6 flex items-center" :class="stepIndex > 0 ? 'justify-between' : 'justify-end'">
+            <Button v-if="stepIndex > 0" variant="subtle" :disabled="submitting" @click="back">Back</Button>
+            <Button v-if="!isLast" variant="solid" @click="next">Next</Button>
+            <Button v-else variant="solid" :loading="submitting" :disabled="!online || submitting" @click="submit">
+              Convert to Deal
+            </Button>
+          </div>
+        </template>
       </div>
-      <p v-if="isLast && !online" class="mt-2 text-center text-xs text-ink-gray-5">
-        Reconnect to convert. Your draft is saved.
-      </p>
-    </footer>
-  </div>
+    </div>
+  </main>
 </template>
 
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, provide, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Button } from 'frappe-ui'
-import AppHeader from '@/components/AppHeader.vue'
-import NoticeBanner from '@/components/NoticeBanner.vue'
-import StatusCard from '@/components/StatusCard.vue'
-import StepIndicator from '@/components/StepIndicator.vue'
+import { Button, ErrorMessage, LoadingText } from 'frappe-ui'
+import StepDots from '@/components/StepDots.vue'
 import { useOnline } from '@/composables/useOnline'
 import { api, errorMessage } from '@/lib/api'
 import { debounce } from '@/lib/debounce'
 import { clearDraft, loadDraft, saveDraft, saveDraftSync } from '@/lib/drafts'
 import { applyDraft, createForm, toPayload } from '@/lib/form'
-import { STEPS, firstInvalidStep, isStepValid, resolveStep, validateStep } from '@/lib/validation'
+import { STEPS, isStepValid, resolveStep, validateStep } from '@/lib/validation'
 import ContactStep from '@/steps/ContactStep.vue'
 import DealStep from '@/steps/DealStep.vue'
 import OrganizationStep from '@/steps/OrganizationStep.vue'
@@ -168,8 +116,6 @@ let draftStep = null
 
 const active = computed(() => ready.value && !!wizard.form)
 const isLast = computed(() => stepIndex.value === STEPS.length - 1)
-const reachable = computed(() => (active.value ? firstInvalidStep(wizard.form, wizard.ctx) : 0))
-const subtitle = computed(() => wizard.ctx?.lead?.lead_name || props.name)
 const leadHref = computed(() => `/crm/leads/${encodeURIComponent(props.name)}`)
 const crmHref = '/crm'
 const dealHref = (deal) => `/crm/deals/${encodeURIComponent(deal)}`
@@ -376,7 +322,7 @@ async function submit() {
     submitError.value = errorMessage(err)
     submitting.value = false
     await nextTick()
-    errorBox.value?.$el?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    errorBox.value?.scrollIntoView({ block: 'center', behavior: 'smooth' })
   }
 }
 

@@ -1,9 +1,6 @@
 <template>
-  <div class="space-y-6">
-    <StepHeading
-      title="Review and confirm"
-      description="Check everything below. Nothing is created until you press Convert."
-    />
+  <div class="space-y-5">
+    <h2 class="text-center text-xl font-semibold text-ink-gray-9">Review</h2>
 
     <ReviewCard title="Lead" :step="null" :rows="leadRows" />
 
@@ -28,7 +25,6 @@
 <script setup>
 import { computed, inject, toRef } from 'vue'
 import ReviewCard from '@/components/ReviewCard.vue'
-import StepHeading from '@/components/StepHeading.vue'
 import { flattenLayout, isEmpty } from '@/lib/layout'
 
 const emit = defineEmits(['edit'])
@@ -37,15 +33,16 @@ const { ctx, form } = w
 const candidates = toRef(w, 'candidates')
 
 const show = (v) => (isEmpty(v) ? '—' : String(v))
+const filled = (rows) => rows.filter((r) => r.value !== '—')
 
 const leadRows = computed(() => [
-  { label: 'Lead', value: show(ctx.lead.lead_name || ctx.lead.name) },
+  { label: 'Name', value: show(ctx.lead.lead_name || ctx.lead.name) },
   { label: 'ID', value: ctx.lead.name },
   { label: 'Status', value: show(ctx.lead.status) },
 ])
 
 const fieldRows = (fields, values) =>
-  fields.map((f) => ({ label: f.label || f.fieldname, value: show(values[f.fieldname]) }))
+  filled(fields.map((f) => ({ label: f.label || f.fieldname, value: show(values[f.fieldname]) })))
 
 const orgRows = computed(() => {
   const org = form.organization
@@ -75,10 +72,9 @@ const contactNote = computed(() =>
 )
 
 const dealRows = computed(() => {
-  const rows = flattenLayout(ctx.deal_layout).map((f) => ({
-    label: f.label || f.fieldname,
-    value: show(form.deal[f.fieldname]),
-  }))
+  const rows = filled(
+    flattenLayout(ctx.deal_layout).map((f) => ({ label: f.label || f.fieldname, value: show(form.deal[f.fieldname]) })),
+  )
   return rows.length ? rows : [{ label: 'Details', value: 'No extra details required' }]
 })
 </script>

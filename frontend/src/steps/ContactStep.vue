@@ -1,64 +1,44 @@
 <template>
-  <div class="space-y-5">
-    <StepHeading
-      title="Contact"
-      description="Link the deal to an existing contact, or create one from the lead's details."
+  <div class="space-y-4">
+    <h2 class="text-center text-xl font-semibold text-ink-gray-9">Contact</h2>
+
+    <Switch v-model="useExisting" label="Choose existing" />
+
+    <Link
+      v-if="useExisting"
+      v-model="contact.existing"
+      doctype="Contact"
+      label="Contact"
+      placeholder="Search contact"
+      :description="matchNote"
+      required
+      :error="showErrors ? errors.existing : ''"
     />
 
-    <ModeToggle v-model="contact.mode" label="Contact source" :options="MODES" />
-
-    <template v-if="contact.mode === 'existing'">
-      <CandidateList
-        v-if="items.length"
-        v-model="contact.existing"
-        :items="items"
-        label="Matching contacts"
-      />
-      <p v-else class="text-sm text-ink-gray-5">
-        No contact with the lead's email or phone was found. Search for one below, or switch to "Create new".
-      </p>
-      <div class="pt-2">
-        <Link
-          v-model="contact.existing"
-          doctype="Contact"
-          label="Search contacts"
-          placeholder="Type to search…"
-          :error="showErrors ? errors.existing : ''"
-        />
-      </div>
-    </template>
-
     <template v-else>
-      <NoticeBanner v-if="candidates.auto_contact" tone="warning">
-        A contact with this email or phone already exists
-        (<strong>{{ candidates.auto_contact }}</strong>). CRM links it instead of creating a duplicate.
-        <template #action>
-          <Button size="sm" variant="subtle" @click="useAuto">Use it</Button>
-        </template>
-      </NoticeBanner>
-
-      <div class="grid gap-4 sm:grid-cols-2">
+      <div class="grid grid-cols-2 gap-x-4 gap-y-4">
         <FieldControl
-          v-for="field in ctx.contact_fields"
+          v-for="field in fields"
           :key="field.fieldname"
           v-model="contact.values[field.fieldname]"
           :field="{ ...field, reqd: field.fieldname === 'first_name' ? 1 : field.reqd }"
+          :class="FULL_WIDTH.includes(field.fieldname) ? 'col-span-2' : ''"
           :error="showErrors ? errors[field.fieldname] : ''"
         />
       </div>
+      <p v-if="candidates.auto_contact" class="text-sm text-ink-gray-5">
+        Contact {{ candidates.auto_contact }} already has this email or phone, so CRM will link it instead of creating a new contact.
+      </p>
+      <p v-else class="text-sm text-ink-gray-5">A new contact is created from these details.</p>
     </template>
   </div>
 </template>
 
 <script setup>
 import { computed, inject, toRef } from 'vue'
-import { Button } from 'frappe-ui'
+import { Switch } from 'frappe-ui'
 import { Link } from 'frappe-ui/frappe'
-import CandidateList from '@/components/CandidateList.vue'
 import FieldControl from '@/components/FieldControl.vue'
-import ModeToggle from '@/components/ModeToggle.vue'
-import NoticeBanner from '@/components/NoticeBanner.vue'
-import StepHeading from '@/components/StepHeading.vue'
 
 const w = inject('wizard')
 const { ctx, form } = w
@@ -67,22 +47,25 @@ const errors = toRef(w, 'errors')
 const showErrors = toRef(w, 'showErrors')
 const contact = form.contact
 
-const MODES = [
-  { value: 'existing', label: 'Use existing' },
-  { value: 'new', label: 'Create new' },
-]
-
-const items = computed(() =>
-  (candidates.value.contacts || []).map((c) => ({
-    name: c.name,
-    title: [c.first_name, c.last_name].filter(Boolean).join(' ') || c.name,
-    subtitle: [c.email_id, c.mobile_no, c.company_name].filter(Boolean).join(' · '),
-    badge: `Matches ${c.reason}`,
-  })),
+// display order: pairs share a row, these span the full width
+const ORDER = ['salutation', 'gender', 'first_name', 'last_name', 'email', 'phone', 'mobile_no', 'job_title']
+const FULL_WIDTH = ['email', 'job_title']
+const fields = computed(() =>
+  [...ctx.contact_fields].sort((a, b) => ORDER.indexOf(a.fieldname) - ORDER.indexOf(b.fieldname)),
 )
 
-function useAuto() {
-  contact.existing = candidates.value.auto_contact
-  contact.mode = 'existing'
-}
+const useExisting = computed({
+  get: () => contact.mode === 'existing',
+  set: (on) => {
+    contact.mode = on ? 'existing' : 'new'
+    if (on && !contact.existing) {
+      contact.existing = candidates.value.auto_contact || candidates.value.contacts?.[0]?.name || ''
+    }
+  },
+})
+
+const matchNote = computed(() => {
+  const match = (candidates.value.contacts || []).find((c) => c.name === contact.existing)
+  return match ? `Matches the lead's ${match.reason}` : ''
+})
 </script>

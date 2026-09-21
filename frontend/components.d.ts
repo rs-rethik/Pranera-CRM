@@ -11,16 +11,10 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
-    AppHeader: typeof import('./src/components/AppHeader.vue')['default']
-    CandidateList: typeof import('./src/components/CandidateList.vue')['default']
     FieldControl: typeof import('./src/components/FieldControl.vue')['default']
-    ModeToggle: typeof import('./src/components/ModeToggle.vue')['default']
-    NoticeBanner: typeof import('./src/components/NoticeBanner.vue')['default']
     ReviewCard: typeof import('./src/components/ReviewCard.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
-    StatusCard: typeof import('./src/components/StatusCard.vue')['default']
-    StepHeading: typeof import('./src/components/StepHeading.vue')['default']
-    StepIndicator: typeof import('./src/components/StepIndicator.vue')['default']
+    StepDots: typeof import('./src/components/StepDots.vue')['default']
   }
 }

@@ -1,27 +1,22 @@
 <template>
-  <section class="rounded-lg border border-outline-gray-2">
-    <header class="flex items-center justify-between border-b border-outline-gray-2 px-4 py-2.5">
-      <h3 class="text-sm font-semibold uppercase tracking-wide text-ink-gray-6">{{ title }}</h3>
-      <button
-        v-if="step !== null"
-        type="button"
-        class="rounded-md px-2 py-1 text-sm font-medium text-ink-gray-7 hover:bg-surface-gray-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-3"
-        @click="emit('edit', step)"
-      >
-        Edit
-      </button>
-    </header>
-    <dl class="divide-y divide-outline-gray-1 px-4">
-      <div v-for="row in rows" :key="row.label" class="grid grid-cols-3 gap-3 py-2.5 text-sm">
-        <dt class="col-span-1 text-ink-gray-5">{{ row.label }}</dt>
-        <dd class="col-span-2 break-words text-ink-gray-9">{{ row.value }}</dd>
+  <section>
+    <div class="mb-1 flex items-center justify-between">
+      <h3 class="text-base font-medium text-ink-gray-8">{{ title }}</h3>
+      <Button v-if="step !== null" variant="ghost" size="sm" @click="emit('edit', step)">Edit</Button>
+    </div>
+    <dl class="space-y-1 text-base">
+      <div v-for="row in rows" :key="row.label" class="flex justify-between gap-4">
+        <dt class="shrink-0 text-ink-gray-5">{{ row.label }}</dt>
+        <dd class="break-words text-right text-ink-gray-9">{{ row.value }}</dd>
       </div>
     </dl>
-    <p v-if="note" class="border-t border-outline-gray-1 px-4 py-2.5 text-sm text-ink-gray-6">{{ note }}</p>
+    <p v-if="note" class="mt-1 text-sm text-ink-gray-5">{{ note }}</p>
   </section>
 </template>
 
 <script setup>
+import { Button } from 'frappe-ui'
+
 defineProps({
   title: { type: String, required: true },
   step: { type: Number, default: null },

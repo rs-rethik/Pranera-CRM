@@ -10,6 +10,12 @@ installable as a PWA. It lives entirely in this app; nothing under `apps/crm` is
 * The actual conversion is done by CRM's own `convert_to_deal`; this app never reimplements it and
   never uses `ignore_permissions`.
 
+**UI.** The look follows Frappe's own setup wizard: a centred card with progress dots above it, a centred
+title, compact stock frappe-ui inputs and small *Back* / *Next* buttons inside the card. There is no custom
+header, stepper, footer bar or theme; only frappe-ui components and its Tailwind tokens are used. The
+"Pranera CRM" name lives in the page title, the PWA manifest and the app icon. Small conditional messages
+(offline, draft restored, errors) appear inline in the card only when relevant.
+
 Tested against Frappe 15.121 / Frappe CRM 1.84.
 
 ## Install
@@ -163,7 +169,7 @@ context permissions/candidates, and `whoami`. They run inside the test transacti
 
 ## Manual verification checklist
 
-1. **Desktop, end to end.** Open an unconverted lead → *Convert (Wizard)*. Step through 1-4, use *Back*, the
+1. **Desktop, end to end.** Open an unconverted lead → *Convert (Wizard)*. Step through the four steps (dots at the top show progress), use *Back*, the
    browser back button and a page reload (step and values must survive). Press *Convert to Deal*; you land on
    `/crm/deals/<name>` and the lead shows as converted. Re-open `/deal_wizard/<lead>`: it says the lead is
    already converted and links to the deal.

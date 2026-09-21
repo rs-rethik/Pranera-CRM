@@ -1,15 +1,14 @@
 <template>
-  <div v-if="kind === 'unsupported'" class="rounded-lg border border-dashed border-outline-gray-2 p-3 text-sm text-ink-gray-5">
-    <span class="font-medium text-ink-gray-7">{{ label }}</span>
-    can't be filled in here. Add it on the deal after converting.
-  </div>
+  <p v-if="kind === 'unsupported'" class="text-sm text-ink-gray-5">
+    {{ label }} can't be filled in here. Add it on the deal after converting.
+  </p>
 
   <Link
     v-else-if="kind === 'link'"
     :model-value="modelValue || null"
     :doctype="field.options"
     :label="label"
-    :placeholder="`Search ${label.toLowerCase()}`"
+    placeholder="Select…"
     :description="field.description"
     :required="!!field.reqd"
     :disabled="isDisabled"
@@ -20,7 +19,7 @@
   <FormControl
     v-else-if="kind === 'status' || kind === 'select'"
     type="select"
-    size="md"
+    size="sm"
     :model-value="modelValue ?? ''"
     :options="selectItems"
     :label="label"
@@ -45,7 +44,7 @@
   <FormControl
     v-else-if="kind === 'number'"
     type="number"
-    size="md"
+    size="sm"
     :step="field.fieldtype === 'Int' ? 1 : 'any'"
     inputmode="decimal"
     :model-value="modelValue ?? ''"
@@ -60,7 +59,7 @@
   <FormControl
     v-else-if="kind === 'date' || kind === 'datetime'"
     :type="kind"
-    size="md"
+    size="sm"
     :model-value="modelValue || ''"
     :label="label"
     :description="field.description"
@@ -73,7 +72,7 @@
   <FormControl
     v-else-if="kind === 'textarea'"
     type="textarea"
-    size="md"
+    size="sm"
     :rows="3"
     :model-value="modelValue ?? ''"
     :label="label"
@@ -87,7 +86,7 @@
   <FormControl
     v-else
     :type="textType"
-    size="md"
+    size="sm"
     :model-value="modelValue ?? ''"
     :label="label"
     :description="field.description"

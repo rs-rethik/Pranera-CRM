@@ -1,77 +1,50 @@
 <template>
-  <div class="flex min-h-dvh flex-col bg-surface-gray-1">
-    <AppHeader back-href="/crm" back-label="Open CRM" />
+  <main
+    class="min-h-dvh bg-surface-white px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-[max(2rem,env(safe-area-inset-top))] sm:pt-[8vh]"
+  >
+    <div class="mx-auto w-full max-w-md rounded-lg border border-outline-gray-2 bg-surface-white p-5 sm:px-10 sm:py-8">
+      <h1 class="mb-6 text-center text-xl font-semibold text-ink-gray-9">Convert a lead</h1>
 
-    <main class="mx-auto w-full max-w-2xl flex-1 space-y-8 px-4 pb-10 pt-6">
-      <div>
-        <h1 class="text-2xl font-semibold text-ink-gray-9">Convert a lead</h1>
-        <p class="mt-1 text-sm text-ink-gray-5">
-          Pick a lead to walk through converting it to a deal.
-        </p>
-      </div>
-
-      <section v-if="drafts.length" aria-labelledby="drafts-title">
-        <h2 id="drafts-title" class="mb-2 text-sm font-semibold uppercase tracking-wide text-ink-gray-6">
-          Drafts on this device
-        </h2>
-        <ul class="space-y-2">
+      <div v-if="drafts.length" class="mb-6">
+        <h2 class="mb-1 text-base font-medium text-ink-gray-8">Drafts</h2>
+        <ul>
           <li v-for="draft in drafts" :key="draft.lead">
             <router-link
               :to="{ name: 'Wizard', params: { name: draft.lead }, query: { step: draft.step || 1 } }"
-              class="flex min-h-14 items-center gap-3 rounded-lg border border-outline-gray-2 bg-surface-white p-3 hover:bg-surface-gray-1"
+              class="flex justify-between gap-4 py-1.5 text-base text-ink-gray-9 hover:underline"
             >
-              <span class="lucide-file-pen-line size-5 shrink-0 text-ink-gray-5" />
-              <span class="min-w-0 flex-1">
-                <span class="block truncate text-base font-medium text-ink-gray-9">{{ draft.lead }}</span>
-                <span class="block text-sm text-ink-gray-5">Step {{ draft.step || 1 }} · saved {{ ago(draft.savedAt) }}</span>
-              </span>
-              <span class="lucide-chevron-right size-4 text-ink-gray-4" />
+              <span class="truncate">{{ draft.lead }}</span>
+              <span class="shrink-0 text-ink-gray-5">Step {{ draft.step || 1 }}</span>
             </router-link>
           </li>
         </ul>
-      </section>
+      </div>
 
-      <section aria-labelledby="leads-title">
-        <h2 id="leads-title" class="mb-2 text-sm font-semibold uppercase tracking-wide text-ink-gray-6">
-          Open leads
-        </h2>
-        <FormControl v-model="search" type="search" size="md" placeholder="Search by name, organization or ID" class="mb-3" />
+      <FormControl v-model="search" type="text" size="sm" label="Lead" placeholder="Search by name, organization or ID" />
 
-        <NoticeBanner v-if="error" tone="error">{{ error }}</NoticeBanner>
-        <div v-else-if="loading" class="animate-pulse space-y-2" aria-busy="true">
-          <div v-for="i in 4" :key="i" class="h-14 rounded-lg bg-surface-gray-2" />
-        </div>
-        <p v-else-if="!leads.length" class="rounded-lg bg-surface-gray-2 p-4 text-sm text-ink-gray-6">
-          No unconverted leads found.
-        </p>
-        <ul v-else class="space-y-2">
+      <div class="mt-4">
+        <ErrorMessage :message="error" />
+        <LoadingText v-if="loading" text="Loading…" />
+        <p v-else-if="!error && !leads.length" class="text-sm text-ink-gray-5">No unconverted leads found.</p>
+        <ul v-else>
           <li v-for="lead in leads" :key="lead.name">
             <router-link
               :to="{ name: 'Wizard', params: { name: lead.name } }"
-              class="flex min-h-14 items-center gap-3 rounded-lg border border-outline-gray-2 bg-surface-white p-3 hover:bg-surface-gray-1"
+              class="flex justify-between gap-4 py-1.5 text-base text-ink-gray-9 hover:underline"
             >
-              <span class="min-w-0 flex-1">
-                <span class="block truncate text-base font-medium text-ink-gray-9">
-                  {{ lead.lead_name || lead.first_name || lead.name }}
-                </span>
-                <span class="block truncate text-sm text-ink-gray-5">
-                  {{ [lead.organization, lead.status, lead.name].filter(Boolean).join(' · ') }}
-                </span>
-              </span>
-              <span class="lucide-chevron-right size-4 text-ink-gray-4" />
+              <span class="truncate">{{ lead.lead_name || lead.first_name || lead.name }}</span>
+              <span class="shrink-0 truncate text-ink-gray-5">{{ lead.organization || lead.name }}</span>
             </router-link>
           </li>
         </ul>
-      </section>
-    </main>
-  </div>
+      </div>
+    </div>
+  </main>
 </template>
 
 <script setup>
 import { onMounted, ref, watch } from 'vue'
-import { FormControl } from 'frappe-ui'
-import AppHeader from '@/components/AppHeader.vue'
-import NoticeBanner from '@/components/NoticeBanner.vue'
+import { ErrorMessage, FormControl, LoadingText } from 'frappe-ui'
 import { api, errorMessage } from '@/lib/api'
 import { debounce } from '@/lib/debounce'
 import { listDrafts } from '@/lib/drafts'
@@ -110,14 +83,6 @@ async function fetchLeads() {
 
 const debouncedFetch = debounce(fetchLeads, 350)
 watch(search, () => debouncedFetch())
-
-function ago(timestamp) {
-  const minutes = Math.round((Date.now() - timestamp) / 60000)
-  if (minutes < 1) return 'just now'
-  if (minutes < 60) return `${minutes} min ago`
-  const hours = Math.round(minutes / 60)
-  return hours < 24 ? `${hours} h ago` : `${Math.round(hours / 24)} d ago`
-}
 
 onMounted(async () => {
   drafts.value = await listDrafts(window.pranera_user)
