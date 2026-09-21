@@ -77,6 +77,14 @@ class LeadAlreadyConverted(frappe.ValidationError):
 # --------------------------------------------------------------------------- #
 
 
+@frappe.whitelist(allow_guest=True)
+def whoami() -> str:
+	"""The session's user. Guests may call it: that is how the SPA tells an expired
+	session (``Guest``) apart from a genuine permission error, since Frappe's own
+	``frappe.auth.get_logged_user`` isn't callable by guests."""
+	return frappe.session.user
+
+
 @frappe.whitelist()
 def get_wizard_context(lead: str) -> dict:
 	"""Everything the wizard needs to render for ``lead`` in one round trip."""

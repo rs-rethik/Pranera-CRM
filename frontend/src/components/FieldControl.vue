@@ -9,6 +9,7 @@
     :model-value="modelValue || null"
     :doctype="field.options"
     :label="label"
+    :placeholder="`Search ${label.toLowerCase()}`"
     :description="field.description"
     :required="!!field.reqd"
     :disabled="isDisabled"

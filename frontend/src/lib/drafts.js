@@ -22,6 +22,24 @@ function idb() {
 
 const keyFor = (user, lead) => `${user}::${lead}`
 
+function writeLocal(user, lead, data) {
+  const record = { ...data, v: VERSION, user, lead, savedAt: Date.now() }
+  try {
+    localStorage.setItem(LS_PREFIX + keyFor(user, lead), JSON.stringify(record))
+  } catch {
+    /* storage unavailable: the draft just isn't persisted */
+  }
+  return record
+}
+
+/**
+ * Synchronous write for page unload, where an async IndexedDB write may be
+ * cut off. loadDraft() prefers whichever copy is newest.
+ */
+export function saveDraftSync(user, lead, data) {
+  writeLocal(user, lead, data)
+}
+
 export async function saveDraft(user, lead, data) {
   const record = { ...data, v: VERSION, user, lead, savedAt: Date.now() }
   try {
@@ -29,28 +47,27 @@ export async function saveDraft(user, lead, data) {
   } catch {
     /* fall through to localStorage */
   }
-  try {
-    localStorage.setItem(LS_PREFIX + keyFor(user, lead), JSON.stringify(record))
-  } catch {
-    /* storage unavailable: the draft just isn't persisted */
-  }
+  writeLocal(user, lead, data)
 }
 
 export async function loadDraft(user, lead) {
-  let record = null
+  let fromIdb = null
+  let fromLocal = null
   try {
-    if (idb()) record = await get(keyFor(user, lead), idb())
+    if (idb()) fromIdb = await get(keyFor(user, lead), idb())
   } catch {
     /* ignore */
   }
-  if (!record) {
-    try {
-      record = JSON.parse(localStorage.getItem(LS_PREFIX + keyFor(user, lead)) || 'null')
-    } catch {
-      record = null
-    }
+  try {
+    fromLocal = JSON.parse(localStorage.getItem(LS_PREFIX + keyFor(user, lead)) || 'null')
+  } catch {
+    /* ignore */
   }
-  if (!record || record.v !== VERSION) return null
+
+  const record = [fromIdb, fromLocal]
+    .filter((r) => r && r.v === VERSION)
+    .sort((a, b) => b.savedAt - a.savedAt)[0]
+  if (!record) return null
   if (Date.now() - record.savedAt > MAX_AGE_MS) {
     await clearDraft(user, lead)
     return null

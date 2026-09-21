@@ -24,7 +24,7 @@ const navigating = () => new Promise(() => {})
  */
 async function loggedUser() {
   try {
-    const res = await fetch('/api/method/frappe.auth.get_logged_user', {
+    const res = await fetch('/api/method/pranera_crm.api.whoami', {
       credentials: 'same-origin',
       headers: { Accept: 'application/json' },
     })

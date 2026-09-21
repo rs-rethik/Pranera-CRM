@@ -5,7 +5,7 @@
       description="Link the deal to an existing organization, or create one from the lead's details."
     />
 
-    <ModeToggle v-model="org.mode" label="Organization" :options="MODES" />
+    <ModeToggle v-model="org.mode" label="Organization source" :options="MODES" />
 
     <template v-if="org.mode === 'existing'">
       <CandidateList
@@ -17,14 +17,15 @@
       <p v-else class="text-sm text-ink-gray-5">
         No similar organizations found. Search for one below, or switch to "Create new".
       </p>
-
-      <Link
-        v-model="org.existing"
-        doctype="CRM Organization"
-        label="Search organizations"
-        placeholder="Type to search…"
-        :error="showErrors ? errors.existing : ''"
-      />
+      <div class="pt-2">
+        <Link
+          v-model="org.existing"
+          doctype="CRM Organization"
+          label="Search organizations"
+          placeholder="Type to search…"
+          :error="showErrors ? errors.existing : ''"
+        />
+      </div>
     </template>
 
     <template v-else>

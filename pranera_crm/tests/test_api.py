@@ -268,3 +268,22 @@ class TestWizardContext(CRMTestCase):
 		ctx = get_wizard_context(lead.name)
 		self.assertTrue(ctx["converted"])
 		self.assertEqual(ctx["deal"], deal)
+
+
+class TestWhoami(CRMTestCase):
+	def tearDown(self):
+		frappe.set_user("Administrator")
+
+	def test_whoami_reports_session_user_and_guest(self):
+		from pranera_crm.api import whoami
+
+		frappe.set_user("Administrator")
+		self.assertEqual(whoami(), "Administrator")
+		frappe.set_user("Guest")
+		self.assertEqual(whoami(), "Guest")
+
+	def test_whoami_is_guest_callable(self):
+		from pranera_crm.api import whoami
+
+		# the SPA relies on this to tell an expired session from a real 403
+		self.assertIn(whoami, frappe.guest_methods)

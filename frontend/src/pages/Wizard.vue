@@ -94,14 +94,14 @@
       class="sticky bottom-0 z-10 border-t border-outline-gray-2 bg-surface-white px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
     >
       <div class="mx-auto flex w-full max-w-2xl gap-3">
-        <Button v-if="stepIndex > 0" size="xl" variant="subtle" :disabled="submitting" @click="back">
+        <Button v-if="stepIndex > 0" class="!h-12 px-5" size="lg" variant="outline" :disabled="submitting" @click="back">
           Back
         </Button>
-        <Button v-if="!isLast" class="flex-1" size="xl" variant="solid" @click="next">Next</Button>
+        <Button v-if="!isLast" class="!h-12 flex-1" size="lg" variant="solid" @click="next">Next</Button>
         <Button
           v-else
-          class="flex-1"
-          size="xl"
+          class="!h-12 flex-1"
+          size="lg"
           variant="solid"
           :loading="submitting"
           :disabled="!online || submitting"
@@ -128,7 +128,7 @@ import StepIndicator from '@/components/StepIndicator.vue'
 import { useOnline } from '@/composables/useOnline'
 import { api, errorMessage } from '@/lib/api'
 import { debounce } from '@/lib/debounce'
-import { clearDraft, loadDraft, saveDraft } from '@/lib/drafts'
+import { clearDraft, loadDraft, saveDraft, saveDraftSync } from '@/lib/drafts'
 import { applyDraft, createForm, toPayload } from '@/lib/form'
 import { STEPS, firstInvalidStep, isStepValid, resolveStep, validateStep } from '@/lib/validation'
 import ContactStep from '@/steps/ContactStep.vue'
@@ -303,16 +303,21 @@ const persist = debounce(() => {
 
 watch([() => wizard.form, stepIndex], () => persist(), { deep: true })
 
-// don't lose the last keystrokes when the tab is hidden or closed
+// Don't lose the last keystrokes when the tab is hidden, reloaded or closed. The
+// IndexedDB write is async and can be cut off during unload, so also write a
+// synchronous localStorage copy (loadDraft picks the newest).
 function flushDraft() {
-  if (document.visibilityState === 'hidden' || document.visibilityState === undefined) persist.flush()
+  if (!active.value || finished) return
+  saveDraftSync(user, props.name, snapshot())
+  persist.flush()
 }
+const flushIfHidden = () => document.visibilityState === 'hidden' && flushDraft()
 onMounted(() => {
-  document.addEventListener('visibilitychange', flushDraft)
+  document.addEventListener('visibilitychange', flushIfHidden)
   window.addEventListener('pagehide', flushDraft)
 })
 onBeforeUnmount(() => {
-  document.removeEventListener('visibilitychange', flushDraft)
+  document.removeEventListener('visibilitychange', flushIfHidden)
   window.removeEventListener('pagehide', flushDraft)
   persist.flush()
 })

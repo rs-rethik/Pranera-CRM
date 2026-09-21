@@ -45,7 +45,8 @@ async function boot() {
 
   setConfig('resourceFetcher', frappeRequest)
   const app = createApp(App)
-  app.use(FrappeUI)
+  // realtime isn't used here; skip frappe-ui's default socket.io connection
+  app.use(FrappeUI, { socketio: false })
   app.use(router)
   app.mount('#app')
 

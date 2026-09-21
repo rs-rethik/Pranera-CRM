@@ -5,7 +5,7 @@
       description="Link the deal to an existing contact, or create one from the lead's details."
     />
 
-    <ModeToggle v-model="contact.mode" label="Contact" :options="MODES" />
+    <ModeToggle v-model="contact.mode" label="Contact source" :options="MODES" />
 
     <template v-if="contact.mode === 'existing'">
       <CandidateList
@@ -17,14 +17,15 @@
       <p v-else class="text-sm text-ink-gray-5">
         No contact with the lead's email or phone was found. Search for one below, or switch to "Create new".
       </p>
-
-      <Link
-        v-model="contact.existing"
-        doctype="Contact"
-        label="Search contacts"
-        placeholder="Type to search…"
-        :error="showErrors ? errors.existing : ''"
-      />
+      <div class="pt-2">
+        <Link
+          v-model="contact.existing"
+          doctype="Contact"
+          label="Search contacts"
+          placeholder="Type to search…"
+          :error="showErrors ? errors.existing : ''"
+        />
+      </div>
     </template>
 
     <template v-else>
