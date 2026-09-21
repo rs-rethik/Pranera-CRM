@@ -258,8 +258,10 @@ required_apps = ["crm"]
 # Deal wizard
 # -----------
 
-# Order matters: the wizard's own route must win over anything generic.
+# The more specific sw.js rule wins over the catch-all (werkzeug prefers static
+# parts), so the service worker is not swallowed by the SPA page.
 website_route_rules = [
+	{"from_route": "/deal_wizard/sw.js", "to_route": "deal_wizard_sw"},
 	{"from_route": "/deal_wizard/<path:app_path>", "to_route": "deal_wizard"},
 ]
 

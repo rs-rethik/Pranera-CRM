@@ -89,6 +89,8 @@ def get_wizard_context(lead: str) -> dict:
 		if df.fieldtype not in frappe.model.no_value_fields and doc.get(df.fieldname) not in (None, "")
 	}
 	lead_data["name"] = doc.name
+	# lets the wizard tell a saved draft was made against an older version of the lead
+	lead_data["modified"] = str(doc.modified)
 	lead_data["lead_name"] = doc.lead_name or doc.first_name
 
 	layout = get_fields_layout(DEAL, "Required Fields")
