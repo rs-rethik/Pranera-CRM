@@ -1,0 +1,11 @@
+[
+ {
+  "doctype": "CRM Form Script",
+  "name": "Pranera Convert Wizard",
+  "dt": "CRM Lead",
+  "view": "Form",
+  "enabled": 1,
+  "is_standard": 0,
+  "script": "// Adds a \"Convert (Wizard)\" action next to the stock \"Convert to Deal\" button.\n// Shipped by the Pranera CRM app (fixture). Uses the setupForm() contract, which\n// leaves other Form Scripts' actions untouched.\nfunction setupForm({ doc }) {\n  return {\n    actions: doc.converted\n      ? []\n      : [\n          {\n            label: 'Convert (Wizard)',\n            onClick: () =>\n              window.location.assign('/deal_wizard/' + encodeURIComponent(doc.name)),\n          },\n        ],\n  }\n}\n"
+ }
+]
