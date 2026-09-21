@@ -8,7 +8,7 @@ app_license = "mit"
 # Apps
 # ------------------
 
-# required_apps = []
+required_apps = ["crm"]
 
 # Each item in the list will be shown as an app in the apps page
 # add_to_apps_screen = [
@@ -253,3 +253,20 @@ app_license = "mit"
 # List of apps whose translatable strings should be excluded from this app's translations.
 # ignore_translatable_strings_from = []
 
+
+
+# Deal wizard
+# -----------
+
+# Order matters: the wizard's own route must win over anything generic.
+website_route_rules = [
+	{"from_route": "/deal_wizard/<path:app_path>", "to_route": "deal_wizard"},
+]
+
+# Serves /deal_wizard/sw.js with `Service-Worker-Allowed: /deal_wizard/`
+page_renderer = ["pranera_crm.sw.ServiceWorkerRenderer"]
+
+# Adds a "Convert (Wizard)" action to the CRM Lead page
+fixtures = [
+	{"dt": "CRM Form Script", "filters": [["name", "=", "Pranera Convert Wizard"]]},
+]
