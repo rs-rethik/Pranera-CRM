@@ -1,3 +1,4 @@
+import { __ } from '@/translation'
 // Helpers for the CRM Deal quick-entry ("Required Fields") layout returned by
 // pranera_crm.api.get_wizard_context. Nothing about Deal fields is hardcoded:
 // the wizard renders whatever CRM's layout contains.
@@ -77,4 +78,20 @@ export function visibleSections(tab) {
         .filter((column) => column.fields.length),
     }))
     .filter((section) => section.columns.length)
+}
+
+/**
+ * Why a candidate matched the lead. The strings are literal `__()` calls so the
+ * translation extractor can find them (a dynamic `__(reason)` would be invisible to it).
+ */
+export function matchReason(reason) {
+  const reasons = {
+    email: __('email'),
+    phone: __('phone'),
+    mobile: __('mobile number'),
+    name: __('name'),
+    website: __('website'),
+    'name and website': __('name and website'),
+  }
+  return reasons[reason] || reason
 }

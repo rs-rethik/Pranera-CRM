@@ -1,6 +1,6 @@
 <template>
   <p v-if="kind === 'unsupported'" class="text-sm text-ink-gray-5">
-    {{ label }} can't be filled in here. Add it on the deal after converting.
+    {{ __("{0} can't be filled in here. Add it on the deal after converting.", [label]) }}
   </p>
 
   <Link
@@ -8,7 +8,7 @@
     :model-value="modelValue || null"
     :doctype="field.options"
     :label="label"
-    placeholder="Select…"
+    :placeholder="__('Select...')"
     :description="field.description"
     :required="!!field.reqd"
     :disabled="isDisabled"
@@ -27,7 +27,7 @@
     :required="!!field.reqd"
     :disabled="isDisabled"
     :error="error"
-    placeholder="Select…"
+    :placeholder="__('Select...')"
     @update:model-value="(v) => emit('update:modelValue', v ?? '')"
   />
 
@@ -102,6 +102,7 @@ import { computed } from 'vue'
 import { FormControl } from 'frappe-ui'
 import { Link } from 'frappe-ui/frappe'
 import { isSupported, selectOptions } from '@/lib/layout'
+import { __ } from '@/translation'
 
 const props = defineProps({
   // a DocField-like dict: { fieldname, label, fieldtype, options, reqd, read_only, description }
@@ -117,7 +118,7 @@ const emit = defineEmits(['update:modelValue'])
 const NUMBER = new Set(['Int', 'Float', 'Currency', 'Percent'])
 const TEXTAREA = new Set(['Small Text', 'Text', 'Long Text', 'Text Editor', 'Markdown Editor', 'HTML Editor', 'Code', 'JSON'])
 
-const label = computed(() => props.field.label || props.field.fieldname)
+const label = computed(() => __(props.field.label || props.field.fieldname))
 const isDisabled = computed(() => props.disabled || !!props.field.read_only)
 
 const kind = computed(() => {

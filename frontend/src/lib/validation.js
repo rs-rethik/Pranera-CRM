@@ -1,3 +1,4 @@
+import { __ } from '@/translation'
 import { flattenLayout, isClientRequired, isEmpty } from './layout'
 
 export const STEPS = [
@@ -20,29 +21,29 @@ export function validateStep(index, form, ctx) {
   if (index === 0) {
     const org = form.organization
     if (org.mode === 'existing') {
-      if (!org.existing) errors.existing = 'Choose an existing organization'
+      if (!org.existing) errors.existing = __('Please select an existing organization')
     } else if (!isEmpty(org.values.annual_revenue) && Number(org.values.annual_revenue) < 0) {
-      errors.annual_revenue = 'Annual revenue cannot be negative'
+      errors.annual_revenue = __('Annual revenue cannot be negative')
     }
   }
 
   if (index === 1) {
     const contact = form.contact
     if (contact.mode === 'existing') {
-      if (!contact.existing) errors.existing = 'Choose an existing contact'
+      if (!contact.existing) errors.existing = __('Please select an existing contact')
     } else {
       if (isEmpty(contact.values.first_name?.trim?.() ?? contact.values.first_name)) {
-        errors.first_name = 'First name is required'
+        errors.first_name = __('{0} is required', [__('First Name')])
       }
       const email = contact.values.email
-      if (!isEmpty(email) && !EMAIL.test(String(email).trim())) errors.email = 'Enter a valid email address'
+      if (!isEmpty(email) && !EMAIL.test(String(email).trim())) errors.email = __('Enter a valid email address')
     }
   }
 
   if (index === 2) {
     for (const field of flattenLayout(ctx?.deal_layout)) {
       if (isClientRequired(field) && isEmpty(form.deal[field.fieldname])) {
-        errors[field.fieldname] = `${field.label || field.fieldname} is required`
+        errors[field.fieldname] = __('{0} is required', [__(field.label || field.fieldname)])
       }
     }
   }

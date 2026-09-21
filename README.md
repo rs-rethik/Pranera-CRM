@@ -29,7 +29,7 @@ bench --site pranera.site migrate               # imports the Form Script fixtur
 bench restart                                    # or restart `bench start`
 ```
 
-Open a lead in CRM and press **Convert to Deal**, or go to `/deal_wizard/<lead name>`.
+Open a lead in CRM and press **Convert to Deal** (needs *Enable Convert to Deal Wizard* ticked, which is the default), or go to `/deal_wizard/<lead name>`.
 
 > **HTTPS.** Service workers (and therefore installing the PWA) only work on `https://` or on
 > `localhost`. Over plain `http://pranera.site:8002` the wizard works but is not installable.
@@ -71,6 +71,7 @@ yarn dev       # Vite dev server on port 8082 (webserver_port 8002 + 80), proxyi
 | `get_wizard_context(lead)` | Read permission check; returns lead prefill data, candidate Organizations (name/website) and Contacts (email/phone/mobile), which of them CRM would silently reuse (`auto_organization`, `auto_contact`), the Deal quick-entry layout (`get_fields_layout("CRM Deal", "Required Fields")`), lead→deal defaults, deal statuses, and `converted` / `lost` / `can_write`. |
 | `search_candidates(lead, …)` | Re-runs the matching for values the user edited. |
 | `convert(lead, deal, existing_contact, existing_organization, lead_updates)` | POST only. Checks write permission, locks the lead row, rejects already-converted (`LeadAlreadyConverted`) and Lost leads, validates existing records are readable, whitelists the deal payload to the quick-entry layout fields (never `lead`, `contacts`, `organization`, `owner`, …), checks required deal fields, applies `lead_updates`, then calls CRM's `convert_to_deal`. Returns the new deal name. |
+| `wizard_enabled()` | Is *Enable Convert to Deal Wizard* ticked? Used by the Lead page's Form Script. The other wizard APIs refuse with `WizardDisabled` when it is off. |
 | `whoami()` | Guest-callable; lets the SPA tell an expired session from a genuine 403. |
 
 **Why `lead_updates`?** `convert_to_deal` builds a *new* Organization/Contact purely from the Lead's own
@@ -131,6 +132,40 @@ Saved per user and lead in IndexedDB (localStorage fallback, plus a synchronous 
 debounced, restored on load ("Draft restored… Start over"), listed on `/deal_wizard/`, expired after 30 days
 and cleared after a successful conversion.
 
+## Site properties (theme, language, formats)
+
+The wizard follows the site the way CRM does:
+
+| Property | How |
+| --- | --- |
+| **Theme** (light / dark / system) | Same mechanism as CRM: frappe-ui's `useTheme()`, stored in `localStorage["theme"]` and applied as `<html data-theme>`. Both apps share an origin, so the wizard uses whatever the user picked in CRM (default light, like CRM). Only theme-aware frappe-ui tokens are used (`surface-base`, `ink-*`, `outline-*`), and the saved theme is applied before first paint. |
+| **Language** | The boot data carries `translated_messages` for the user's language (`frappe.translate.get_messages_for_boot`, merged from every app plus *Translation* records), exactly like CRM, and the UI uses a CRM-compatible `__()`. Wording reuses CRM's own strings where they exist ("Choose Existing", "Convert to Deal", "{0} is required", …), so those come pre-translated. `<html lang>` and `dir` follow the language, so right-to-left languages mirror. Field labels come from the doctype meta and are translated like CRM's. |
+| **New strings** | `pranera_crm/locale/main.pot` lists the wizard's own strings (regenerate with `bench generate-pot-file --app pranera_crm`); add `<lang>.po` files or *Translation* records to translate them. Untranslated strings fall back to English. |
+| **Date / time / number format, currency** | From *System Settings* (`date_format`, `time_format`, `number_format`, precisions) and *CRM Settings* (currency). Values on the Review step are shown in those formats, e.g. `₹ 12,34,567.50`, `21-09-2026`. |
+| **Time zone** | System and user time zones are passed to frappe-ui (`systemTimezone` / `localTimezone`) as in CRM. |
+| **Branding** | *CRM Settings > Branding*: the brand name becomes the tab title and the favicon is used, if set. |
+
+Not followed: the installed PWA's name and icons come from a static manifest (a manifest can't vary per site),
+and the date/time *pickers* use frappe-ui's own display.
+
+## Turning the wizard on or off (CRM Settings)
+
+A **Custom Field** on *CRM Settings* (`FCRM Settings`), **Enable Convert to Deal Wizard**
+(`enable_convert_to_deal_wizard`, checkbox, shipped as a fixture), sits next to CRM's other "Enable …" options on
+the *Settings* tab of `/app/fcrm-settings`. (CRM's own Settings modal renders a fixed set of fields, so the new
+option lives on the Desk form.)
+
+* **Ticked (default)**: *Convert to Deal* on a lead opens the wizard.
+* **Unticked**: CRM's standard flow applies everywhere:
+  * the Form Script does nothing, so CRM's own *Convert to Deal* button and dialog are shown;
+  * `/deal_wizard/…` redirects to the same lead in CRM (`/deal_wizard/` to `/crm`);
+  * the wizard's APIs refuse with `WizardDisabled`, and a wizard tab that is already open falls back to the lead
+    page when you press *Convert* (nothing is converted).
+
+The default is written once, on install/migrate, and remembered, so an admin's choice is never overwritten by a
+later `migrate`. (Frappe stores an untouched checkbox as `0` once the settings are saved for any reason, so
+"never set" cannot be told apart from "unticked" without that marker.)
+
 ## Entry point from the Lead page
 
 `pranera_crm/fixtures/crm_form_script.json` installs a **CRM Form Script** ("Pranera Convert Wizard",
@@ -138,7 +173,7 @@ and cleared after a successful conversion.
 
 * It adds a **Convert to Deal** action (CRM's `setupForm({ doc })` → `{ actions: [...] }` contract) that
   navigates to `/deal_wizard/<lead>`. It is omitted once the lead is converted.
-* CRM's own **Convert to Deal** button is **hidden**. A Form Script has no API to remove built-in buttons, so the
+* CRM's own **Convert to Deal** button is **hidden** (only while the switch above is on). A Form Script has no API to remove built-in buttons, so the
   script hides it in the DOM (a `MutationObserver` on `div.inline-flex > button` whose label is
   `Convert` / `Convert to Deal`; CRM wraps only that button in a Tooltip `div.inline-flex`). Nothing in
   `apps/crm` is modified.

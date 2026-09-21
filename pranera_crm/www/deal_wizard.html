@@ -7,6 +7,14 @@
       content="width=device-width, initial-scale=1.0, viewport-fit=cover"
     />
     <title>Pranera CRM</title>
+    <script>
+      // apply the saved theme before first paint (same key/values frappe-ui and CRM use)
+      try {
+        var t = localStorage.getItem('theme')
+        var dark = t === 'dark' || (t === 'system' && matchMedia('(prefers-color-scheme: dark)').matches)
+        document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light')
+      } catch (e) {}
+    </script>
     <meta name="theme-color" content="#4f46e5" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -15,11 +23,13 @@
 
     <link rel="icon" type="image/png" sizes="192x192" href="/assets/pranera_crm/frontend/icons/icon-192.png" />
     <link rel="apple-touch-icon" href="/assets/pranera_crm/frontend/icons/apple-touch-icon.png" />
-    <script type="module" crossorigin src="/assets/pranera_crm/frontend/assets/index-DfS7MLrD.js"></script>
-    <link rel="modulepreload" crossorigin href="/assets/pranera_crm/frontend/assets/_plugin-vue_export-helper-B4xJ46hA.js">
-    <link rel="stylesheet" crossorigin href="/assets/pranera_crm/frontend/assets/index-2fnXtXzk.css">
+    <script type="module" crossorigin src="/assets/pranera_crm/frontend/assets/index-h5tTRA6R.js"></script>
+    <link rel="modulepreload" crossorigin href="/assets/pranera_crm/frontend/assets/warnDeprecated-D7YeJAyp.js">
+    <link rel="modulepreload" crossorigin href="/assets/pranera_crm/frontend/assets/Button-XufodGI7.js">
+    <link rel="stylesheet" crossorigin href="/assets/pranera_crm/frontend/assets/Button-ug8Vt_Qh.css">
+    <link rel="stylesheet" crossorigin href="/assets/pranera_crm/frontend/assets/index-D3jFNT85.css">
   <link rel="manifest" href="/assets/pranera_crm/frontend/manifest.webmanifest"></head>
-  <body class="h-full bg-surface-white">
+  <body class="h-full bg-surface-base">
     <div id="app" class="h-full"></div>
   
           <script>

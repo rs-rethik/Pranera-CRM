@@ -271,4 +271,10 @@ page_renderer = ["pranera_crm.sw.ServiceWorkerRenderer"]
 # Adds a "Convert (Wizard)" action to the CRM Lead page
 fixtures = [
 	{"dt": "CRM Form Script", "filters": [["name", "=", "Pranera Convert Wizard"]]},
+	# "Enable Convert to Deal Wizard" switch on CRM Settings
+	{"dt": "Custom Field", "filters": [["name", "=", "FCRM Settings-enable_convert_to_deal_wizard"]]},
 ]
+
+# Store the switch's default (enabled) once; never overwrites a saved value
+after_install = "pranera_crm.setup.after_install"
+after_migrate = "pranera_crm.setup.after_migrate"

@@ -287,3 +287,109 @@ class TestWhoami(CRMTestCase):
 
 		# the SPA relies on this to tell an expired session from a real 403
 		self.assertIn(whoami, frappe.guest_methods)
+
+
+class TestWizardSwitch(CRMTestCase):
+	"""CRM Settings > Enable Convert to Deal Wizard"""
+
+	def setUp(self):
+		frappe.set_user("Administrator")
+
+	def tearDown(self):
+		frappe.set_user("Administrator")
+		frappe.db.rollback()
+
+	def _set(self, value):
+		from pranera_crm.settings import ENABLE_FIELD, SETTINGS
+
+		frappe.db.set_single_value(SETTINGS, ENABLE_FIELD, value)
+
+	def test_custom_field_exists_on_crm_settings(self):
+		from pranera_crm.settings import ENABLE_FIELD, SETTINGS
+
+		df = frappe.get_meta(SETTINGS).get_field(ENABLE_FIELD)
+		self.assertIsNotNone(df)
+		self.assertEqual(df.fieldtype, "Check")
+		self.assertEqual(str(df.default), "1")
+
+	def test_enabled_by_default_when_never_saved(self):
+		from pranera_crm.settings import ENABLE_FIELD, SETTINGS, is_wizard_enabled
+
+		frappe.db.sql("delete from `tabSingles` where `doctype` = %s and `field` = %s", (SETTINGS, ENABLE_FIELD))
+		self.assertTrue(is_wizard_enabled())
+
+	def test_ticked_and_unticked(self):
+		from pranera_crm.api import wizard_enabled
+
+		self._set(1)
+		self.assertTrue(wizard_enabled())
+		self._set(0)
+		self.assertFalse(wizard_enabled())
+
+	def test_disabled_blocks_every_wizard_api(self):
+		from pranera_crm.api import WizardDisabled, search_candidates
+
+		lead = make_lead()
+		self._set(0)
+
+		with self.assertRaises(WizardDisabled):
+			get_wizard_context(lead.name)
+		with self.assertRaises(WizardDisabled):
+			search_candidates(lead.name)
+		with self.assertRaises(WizardDisabled):
+			convert(lead.name, deal={"status": deal_status()})
+
+		# nothing was converted: CRM's own flow is unaffected and still works
+		lead.reload()
+		self.assertFalse(lead.converted)
+		from crm.fcrm.doctype.crm_lead.crm_lead import convert_to_deal
+
+		self.assertTrue(convert_to_deal(lead=lead.name, deal={"status": deal_status()}))
+
+	def test_reenabled_wizard_works_again(self):
+		lead = make_lead()
+		self._set(0)
+		self._set(1)
+		self.assertTrue(convert(lead.name, deal={"status": deal_status()}))
+
+	def test_default_is_written_once_and_never_overwrites_an_admin_choice(self):
+		from pranera_crm.settings import DEFAULT_APPLIED, ensure_default, is_wizard_enabled
+
+		# first run: the (possibly materialised-as-0) value becomes the default
+		frappe.db.set_default(DEFAULT_APPLIED, "")
+		self._set(0)
+		ensure_default()
+		self.assertTrue(is_wizard_enabled())
+
+		# afterwards the stored value belongs to the admin
+		self._set(0)
+		ensure_default()
+		self.assertFalse(is_wizard_enabled())
+
+	def test_redirect_target_when_disabled(self):
+		from pranera_crm.www.deal_wizard import crm_url_for_request
+
+		previous = getattr(frappe.local, "request", None)
+		try:
+			frappe.local.request = frappe._dict(path="/deal_wizard/CRM-LEAD-2026-00001")
+			self.assertEqual(crm_url_for_request(), "/crm/leads/CRM-LEAD-2026-00001")
+			frappe.local.request = frappe._dict(path="/deal_wizard/")
+			self.assertEqual(crm_url_for_request(), "/crm")
+			frappe.local.request = frappe._dict(path="/deal_wizard")
+			self.assertEqual(crm_url_for_request(), "/crm")
+		finally:
+			frappe.local.request = previous
+
+
+class TestSiteProperties(CRMTestCase):
+	def test_follows_system_settings(self):
+		from pranera_crm.settings import get_site_properties
+
+		props = get_site_properties()
+		for key in ("lang", "rtl", "timezone", "date_format", "number_format", "currency", "brand"):
+			self.assertIn(key, props)
+		self.assertEqual(props["date_format"], frappe.get_system_settings("date_format"))
+		self.assertEqual(props["number_format"], frappe.get_system_settings("number_format"))
+		self.assertEqual(props["lang"], frappe.local.lang)
+		self.assertIn("system", props["timezone"])
+		self.assertIn("name", props["brand"])

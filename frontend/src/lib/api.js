@@ -1,4 +1,5 @@
 import { call } from 'frappe-ui'
+import { __ } from '@/translation'
 
 const CSRF_RELOAD_FLAG = 'pranera:csrf-reloaded'
 
@@ -12,6 +13,12 @@ export function loginUrl(path = currentPath()) {
 
 export function redirectToLogin() {
   window.location.assign(loginUrl())
+}
+
+/** /deal_wizard/<lead> -> the same lead in CRM; anything else -> the CRM home. */
+export function crmUrlForPath(pathname = window.location.pathname) {
+  const [, lead] = pathname.replace(/^\/deal_wizard\/?/, '/').split('/')
+  return lead ? `/crm/leads/${encodeURIComponent(decodeURIComponent(lead))}` : '/crm'
 }
 
 // A promise that never settles: used after we've started navigating away so
@@ -56,6 +63,11 @@ export async function api(method, params = {}) {
     sessionStorage.removeItem(CSRF_RELOAD_FLAG)
     return result
   } catch (err) {
+    if (err?.exc_type === 'WizardDisabled') {
+      // switched off in CRM Settings: CRM's own Convert to Deal flow applies
+      window.location.assign(crmUrlForPath())
+      return navigating()
+    }
     if (isAuthFailure(err)) {
       const user = await loggedUser()
       if (user === 'Guest') {
@@ -85,7 +97,7 @@ export function stripHtml(text) {
 export function errorMessage(err) {
   if (err instanceof TypeError || err?.status === undefined) {
     if (!navigator.onLine || err instanceof TypeError) {
-      return 'Could not reach the server. Check your connection; your draft is saved on this device.'
+      return __('Could not reach the server. Check your connection; your draft is saved on this device.')
     }
   }
   if (err?.exc_type === 'MandatoryError') {
@@ -93,9 +105,9 @@ export function errorMessage(err) {
       .map((m) => stripHtml(m).split(': ').pop().trim())
       .filter(Boolean)
       .join(', ')
-    if (!message) return 'Some required fields are missing.'
-    return /required/i.test(message) ? message : `${message} is required`
+    if (!message) return __('Some required fields are missing.')
+    return /required/i.test(message) ? message : __('{0} is required', [message])
   }
   const first = (err?.messages || []).map(stripHtml).find(Boolean)
-  return first || 'Something went wrong. Please try again.'
+  return first || __('Something went wrong. Please try again.')
 }

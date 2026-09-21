@@ -5,6 +5,8 @@ import { FrappeUI, frappeRequest, setConfig } from 'frappe-ui'
 import App from './App.vue'
 import router from './router'
 import { redirectToLogin } from './lib/api'
+import { applySiteProperties } from './lib/site'
+import translationPlugin, { setTranslations } from './translation'
 
 function registerServiceWorker() {
   if (!('serviceWorker' in navigator) || import.meta.env.DEV) return
@@ -43,8 +45,13 @@ async function boot() {
     return
   }
 
+  // language, direction, tab title and favicon follow the site (as in CRM)
+  setTranslations(window.translated_messages)
+  applySiteProperties()
+
   setConfig('resourceFetcher', frappeRequest)
   const app = createApp(App)
+  app.use(translationPlugin)
   // realtime isn't used here; skip frappe-ui's default socket.io connection
   app.use(FrappeUI, { socketio: false })
   app.use(router)

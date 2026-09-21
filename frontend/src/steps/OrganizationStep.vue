@@ -1,15 +1,15 @@
 <template>
   <div class="space-y-4">
-    <h2 class="text-center text-xl font-semibold text-ink-gray-9">Organization</h2>
+    <h2 class="text-center text-xl font-semibold text-ink-gray-9">{{ __('Organization') }}</h2>
 
-    <Switch v-model="useExisting" label="Choose existing" />
+    <Switch v-model="useExisting" :label="__('Choose Existing')" />
 
     <Link
       v-if="useExisting"
       v-model="org.existing"
       doctype="CRM Organization"
-      label="Organization"
-      placeholder="Search organization"
+      :label="__('Organization')"
+      :placeholder="__('Search organization')"
       :description="matchNote"
       required
       :error="showErrors ? errors.existing : ''"
@@ -27,10 +27,10 @@
         />
       </div>
       <p v-if="candidates.auto_organization" class="text-sm text-ink-gray-5">
-        "{{ candidates.auto_organization }}" already exists, so CRM will link it instead of creating a new organization.
+        {{ __('"{0}" already exists, so CRM will link it instead of creating a new organization.', [candidates.auto_organization]) }}
       </p>
       <p v-else class="text-sm text-ink-gray-5">
-        A new organization is created from these details. Leave the name empty to convert without one.
+        {{ __('A new organization is created from these details. Leave the name empty to convert without one.') }}
       </p>
     </template>
   </div>
@@ -41,6 +41,8 @@ import { computed, inject, toRef } from 'vue'
 import { Switch } from 'frappe-ui'
 import { Link } from 'frappe-ui/frappe'
 import FieldControl from '@/components/FieldControl.vue'
+import { matchReason } from '@/lib/layout'
+import { __ } from '@/translation'
 
 const w = inject('wizard')
 const { ctx, form } = w
@@ -62,6 +64,6 @@ const useExisting = computed({
 
 const matchNote = computed(() => {
   const match = (candidates.value.organizations || []).find((o) => o.name === org.existing)
-  return match ? (match.exact ? 'Exact match with the lead' : `Matches the lead's ${match.reason}`) : ''
+  return match ? (match.exact ? __('Exact match with the lead') : __("Matches the lead's {0}", [matchReason(match.reason)])) : ''
 })
 </script>

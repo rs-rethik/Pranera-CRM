@@ -1,6 +1,6 @@
 <template>
   <nav class="mb-4 flex items-center justify-center gap-2" aria-label="Progress">
-    <span class="sr-only">Step {{ current + 1 }} of {{ total }}</span>
+    <span class="sr-only">{{ __('Step {0} of {1}', [current + 1, total]) }}</span>
     <span
       v-for="i in total"
       :key="i"

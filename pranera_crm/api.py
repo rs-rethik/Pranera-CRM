@@ -14,6 +14,7 @@ from frappe.utils import cint
 
 from crm.fcrm.doctype.crm_fields_layout.crm_fields_layout import get_fields_layout
 from crm.fcrm.doctype.crm_lead.crm_lead import convert_to_deal
+from pranera_crm.settings import is_wizard_enabled
 
 LEAD = "CRM Lead"
 DEAL = "CRM Deal"
@@ -72,9 +73,25 @@ class LeadAlreadyConverted(frappe.ValidationError):
 	pass
 
 
+class WizardDisabled(frappe.ValidationError):
+	""""Enable Convert to Deal Wizard" is off in CRM Settings: CRM's own flow applies."""
+
+
+def _ensure_enabled():
+	if not is_wizard_enabled():
+		frappe.throw(_("The Convert to Deal wizard is turned off in CRM Settings."), WizardDisabled)
+
+
 # --------------------------------------------------------------------------- #
 # Context
 # --------------------------------------------------------------------------- #
+
+
+@frappe.whitelist()
+def wizard_enabled() -> bool:
+	"""Is the wizard switched on in CRM Settings? The Lead page's Form Script asks this
+	to decide between the wizard and CRM's standard Convert to Deal flow."""
+	return is_wizard_enabled()
 
 
 @frappe.whitelist(allow_guest=True)
@@ -88,6 +105,7 @@ def whoami() -> str:
 @frappe.whitelist()
 def get_wizard_context(lead: str) -> dict:
 	"""Everything the wizard needs to render for ``lead`` in one round trip."""
+	_ensure_enabled()
 	_get_lead_for_read(lead)
 	doc = frappe.get_doc(LEAD, lead)
 
@@ -142,6 +160,7 @@ def search_candidates(
 	mobile_no: str | None = None,
 ) -> dict:
 	"""Re-run the match lookup for values the user edited in the wizard."""
+	_ensure_enabled()
 	_get_lead_for_read(lead)
 	return find_candidates(
 		organization=organization, website=website, email=email, phone=phone, mobile_no=mobile_no
@@ -267,6 +286,8 @@ def convert(
 	Everything runs in the request's single transaction, so a failure anywhere
 	rolls the lead edits and the ``converted`` flag back too.
 	"""
+	_ensure_enabled()
+
 	if not frappe.db.exists(LEAD, lead):
 		frappe.throw(_("Lead {0} does not exist").format(lead), frappe.DoesNotExistError)
 

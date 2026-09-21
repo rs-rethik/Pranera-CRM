@@ -1,65 +1,65 @@
 <template>
   <main
-    class="min-h-dvh bg-surface-white px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-[max(2rem,env(safe-area-inset-top))] sm:pt-[8vh]"
+    class="min-h-dvh bg-surface-base px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-[max(2rem,env(safe-area-inset-top))] sm:pt-[8vh]"
   >
     <div class="mx-auto w-full max-w-md">
       <StepDots v-if="active" :total="STEPS.length" :current="stepIndex" />
 
-      <div class="rounded-lg border border-outline-gray-2 bg-surface-white p-5 sm:px-10 sm:py-8">
-        <LoadingText v-if="loading" class="justify-center" text="Loading…" />
+      <div class="rounded-lg border border-outline-gray-2 bg-surface-base p-5 sm:px-10 sm:py-8">
+        <LoadingText v-if="loading" class="justify-center" :text="__('Loading...')" />
 
         <!-- couldn't load -->
         <div v-else-if="loadError" class="space-y-4">
           <ErrorMessage :message="loadError" />
           <div class="flex justify-end gap-2">
-            <a :href="crmHref"><Button variant="subtle">Open CRM</Button></a>
-            <Button variant="solid" @click="load">Try again</Button>
+            <a :href="crmHref"><Button variant="subtle">{{ __('Open CRM') }}</Button></a>
+            <Button variant="solid" @click="load">{{ __('Try again') }}</Button>
           </div>
         </div>
 
         <!-- already converted -->
         <div v-else-if="wizard.ctx?.converted" class="space-y-4 text-center">
-          <h2 class="text-xl font-semibold text-ink-gray-9">Already converted</h2>
+          <h2 class="text-xl font-semibold text-ink-gray-9">{{ __('Already converted') }}</h2>
           <p class="text-base text-ink-gray-6">
-            {{ wizard.ctx.deal ? `This lead was converted to deal ${wizard.ctx.deal}.` : 'This lead has already been converted.' }}
+            {{ wizard.ctx.deal ? __('This lead was converted to deal {0}.', [wizard.ctx.deal]) : __('This lead has already been converted.') }}
           </p>
           <a :href="wizard.ctx.deal ? dealHref(wizard.ctx.deal) : leadHref">
-            <Button variant="solid">{{ wizard.ctx.deal ? 'Open deal' : 'Open lead' }}</Button>
+            <Button variant="solid">{{ wizard.ctx.deal ? __('Open deal') : __('Open lead') }}</Button>
           </a>
         </div>
 
         <div v-else-if="wizard.ctx?.lost" class="space-y-4 text-center">
-          <h2 class="text-xl font-semibold text-ink-gray-9">Can't convert</h2>
-          <p class="text-base text-ink-gray-6">Leads with a lost status can't be converted.</p>
-          <a :href="leadHref"><Button variant="solid">Open lead</Button></a>
+          <h2 class="text-xl font-semibold text-ink-gray-9">{{ __("Can't convert") }}</h2>
+          <p class="text-base text-ink-gray-6">{{ __("Leads with a lost status can't be converted.") }}</p>
+          <a :href="leadHref"><Button variant="solid">{{ __('Open lead') }}</Button></a>
         </div>
 
         <div v-else-if="wizard.ctx && !wizard.ctx.can_write" class="space-y-4 text-center">
-          <h2 class="text-xl font-semibold text-ink-gray-9">Can't convert</h2>
-          <p class="text-base text-ink-gray-6">You have read-only access to this lead.</p>
-          <a :href="leadHref"><Button variant="solid">Open lead</Button></a>
+          <h2 class="text-xl font-semibold text-ink-gray-9">{{ __("Can't convert") }}</h2>
+          <p class="text-base text-ink-gray-6">{{ __('You have read-only access to this lead.') }}</p>
+          <a :href="leadHref"><Button variant="solid">{{ __('Open lead') }}</Button></a>
         </div>
 
         <!-- the wizard -->
         <template v-else-if="active">
           <p v-if="draftInfo" class="mb-4 text-sm text-ink-gray-5">
-            Draft restored from {{ savedAgo(draftInfo.savedAt) }}.
-            <span v-if="draftInfo.leadChanged">The lead has changed since, so check the values.</span>
-            <button type="button" class="underline" @click="startOver">Start over</button>
+            {{ __('Draft restored from {0}.', [savedAgo(draftInfo.savedAt)]) }}
+            <span v-if="draftInfo.leadChanged">{{ __('The lead has changed since, so check the values.') }}</span>
+            <button type="button" class="underline" @click="startOver">{{ __('Start over') }}</button>
           </p>
 
           <component :is="STEP_COMPONENTS[stepIndex]" @edit="goTo" />
 
           <p v-if="!online" class="mt-4 text-sm text-ink-amber-3" role="status">
-            You're offline. Your draft is saved on this device; reconnect to convert.
+            {{ __("You're offline. Your draft is saved on this device; reconnect to convert.") }}
           </p>
           <div ref="errorBox"><ErrorMessage class="mt-4" :message="submitError" /></div>
 
           <div class="mt-6 flex items-center" :class="stepIndex > 0 ? 'justify-between' : 'justify-end'">
-            <Button v-if="stepIndex > 0" variant="subtle" :disabled="submitting" @click="back">Back</Button>
-            <Button v-if="!isLast" variant="solid" @click="next">Next</Button>
+            <Button v-if="stepIndex > 0" variant="subtle" :disabled="submitting" @click="back">{{ __('Back') }}</Button>
+            <Button v-if="!isLast" variant="solid" @click="next">{{ __('Next') }}</Button>
             <Button v-else variant="solid" :loading="submitting" :disabled="!online || submitting" @click="submit">
-              Convert to Deal
+              {{ __('Convert to Deal') }}
             </Button>
           </div>
         </template>
@@ -79,6 +79,7 @@ import { debounce } from '@/lib/debounce'
 import { clearDraft, loadDraft, saveDraft, saveDraftSync } from '@/lib/drafts'
 import { applyDraft, createForm, toPayload } from '@/lib/form'
 import { STEPS, isStepValid, resolveStep, validateStep } from '@/lib/validation'
+import { __ } from '@/translation'
 import ContactStep from '@/steps/ContactStep.vue'
 import DealStep from '@/steps/DealStep.vue'
 import OrganizationStep from '@/steps/OrganizationStep.vue'
@@ -279,11 +280,11 @@ async function startOver() {
 
 function savedAgo(timestamp) {
   const minutes = Math.round((Date.now() - timestamp) / 60000)
-  if (minutes < 1) return 'a moment ago'
-  if (minutes < 60) return `${minutes} min ago`
+  if (minutes < 1) return __('a moment ago')
+  if (minutes < 60) return __('{0} min ago', [minutes])
   const hours = Math.round(minutes / 60)
-  if (hours < 24) return `${hours} h ago`
-  return `${Math.round(hours / 24)} d ago`
+  if (hours < 24) return __('{0} h ago', [hours])
+  return __('{0} d ago', [Math.round(hours / 24)])
 }
 
 // ---- submit ------------------------------------------------------------------
