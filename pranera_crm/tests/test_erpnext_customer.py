@@ -3,7 +3,7 @@ import frappe
 from crm.tests import CRMTestCase
 from pranera_crm import customer_wizard as cw
 from pranera_crm import erpnext_customer as ec
-from pranera_crm.api import convert
+from pranera_crm.api import convert, setup_customer_for_deal
 from pranera_crm.tests.test_api import _hash, deal_status, make_lead, make_org, make_user
 from pranera_crm.tests.test_customer_wizard import isolate_from_seed_questions, make_question
 
@@ -283,3 +283,82 @@ class TestErpnextCustomerCreate(CRMTestCase):
 		frappe.set_user(user)
 		with self.assertRaises(frappe.PermissionError):
 			ec.create(deal=deal.name, organization_answers={}, contact_answers={}, address={})
+
+
+class TestSetupCustomerForDeal(CRMTestCase):
+	"""The standalone retry/confirm endpoint used after `convert` reports
+	`duplicate_customer` or `customer_error` — never touches the Deal/Lead."""
+
+	def setUp(self):
+		frappe.set_user("Administrator")
+		set_erpnext_bridge(True)
+		isolate_from_seed_questions()
+
+	def tearDown(self):
+		frappe.set_user("Administrator")
+		set_erpnext_bridge(True)
+		frappe.db.rollback()
+
+	def test_retry_after_duplicate_links_to_existing_without_reconverting(self):
+		lead = make_lead()
+		existing = frappe.get_doc({"doctype": "Customer", "customer_name": lead.organization}).insert(
+			ignore_permissions=True
+		)
+
+		response = convert(lead.name, deal={"status": deal_status()}, setup_customer=True)
+		self.assertEqual(response["duplicate_customer"], existing.name)
+		self.assertIsNone(response["customer"])
+
+		retry = setup_customer_for_deal(response["deal"], confirm_duplicate_customer=True)
+		self.assertEqual(retry["customer"], existing.name)
+		self.assertIsNone(retry["customer_error"])
+		self.assertEqual(frappe.db.count("Customer", {"customer_name": lead.organization}), 1)
+
+		# the lead/deal from the first call are untouched by the retry
+		lead.reload()
+		self.assertTrue(lead.converted)
+		self.assertEqual(frappe.db.get_value("CRM Deal", response["deal"], "erpnext_customer"), existing.name)
+
+	def test_retry_after_gst_error_succeeds_with_fixed_answers(self):
+		lead = make_lead()
+		response = convert(
+			lead.name,
+			deal={"status": deal_status()},
+			setup_customer=True,
+			customer_address=frappe.as_json({"address_line1": "1 MG Road", "city": "Chennai", "country": "India", "gstin": "bad"}),
+		)
+		self.assertTrue(response["customer_error"])
+		self.assertIsNone(response["customer"])
+
+		retry = setup_customer_for_deal(
+			response["deal"],
+			customer_address=frappe.as_json({"address_line1": "1 MG Road", "city": "Chennai", "state": "Tamil Nadu", "country": "India"}),
+		)
+		self.assertIsNone(retry["customer_error"])
+		self.assertTrue(retry["customer"])
+
+	def test_idempotent_once_customer_already_linked(self):
+		lead = make_lead()
+		response = convert(lead.name, deal={"status": deal_status()}, setup_customer=True)
+		self.assertTrue(response["customer"])
+		customers_before = frappe.db.count("Customer")
+
+		retry = setup_customer_for_deal(response["deal"])
+		self.assertEqual(retry["customer"], response["customer"])
+		self.assertEqual(frappe.db.count("Customer"), customers_before)  # no second attempt made
+
+	def test_permission_denied_without_deal_write_access(self):
+		lead = make_lead()
+		response = convert(lead.name, deal={"status": deal_status()}, setup_customer=False)
+
+		user = make_user(roles=[], prefix="cw-deal-noperm")
+		frappe.set_user(user)
+		with self.assertRaises(frappe.PermissionError):
+			setup_customer_for_deal(response["deal"])
+
+	def test_disabled_bridge_rejected(self):
+		lead = make_lead()
+		response = convert(lead.name, deal={"status": deal_status()}, setup_customer=False)
+		set_erpnext_bridge(False)
+		with self.assertRaises(frappe.ValidationError):
+			setup_customer_for_deal(response["deal"])

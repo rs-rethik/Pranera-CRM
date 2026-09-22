@@ -342,30 +342,73 @@ def convert(
 
 	response = {"deal": deal_name, "customer": None, "customer_error": None, "duplicate_customer": None}
 	if setup_customer and is_erpnext_customer_enabled():
-		_setup_customer(
-			deal_name,
-			customer_answers,
-			contact_customer_answers,
-			customer_address,
-			customer_overrides,
-			confirm_duplicate_customer,
-			response,
+		response.update(
+			_run_customer_setup(
+				deal_name,
+				customer_answers,
+				contact_customer_answers,
+				customer_address,
+				customer_overrides,
+				confirm_duplicate_customer,
+			)
 		)
 	return response
 
 
-def _setup_customer(
-	deal_name, customer_answers, contact_customer_answers, customer_address, customer_overrides, confirm, response
-):
-	# A savepoint, not a commit/rollback pair: on failure this undoes only the
-	# Customer/Address/Contact changes attempted below, leaving the Deal conversion
-	# (already part of this same transaction) and everything before it untouched,
-	# whether the request goes on to commit normally or — inside the test runner —
-	# gets rolled back wholesale by the test's own transaction.
+@frappe.whitelist(methods=["POST"])
+def setup_customer_for_deal(
+	deal: str,
+	customer_answers: str | dict | None = None,
+	contact_customer_answers: str | dict | None = None,
+	customer_address: str | dict | None = None,
+	customer_overrides: str | dict | None = None,
+	confirm_duplicate_customer: bool = False,
+) -> dict:
+	"""Run (or retry) just the ERPNext Customer setup for an *already converted* deal.
+
+	Used when ``convert`` reported ``duplicate_customer`` (resubmit with
+	``confirm_duplicate_customer=True`` to link to it) or ``customer_error`` (fix
+	the answers and try again) — the Deal itself was already converted and is
+	never touched here. Returns ``{"customer": ..., "customer_error": ...,
+	"duplicate_customer": ...}``.
+	"""
+	if not frappe.db.exists(DEAL, deal):
+		frappe.throw(_("Deal {0} does not exist").format(deal), frappe.DoesNotExistError)
+	if not frappe.has_permission(DEAL, "write", deal):
+		frappe.throw(_("Not allowed to update this deal"), frappe.PermissionError)
+	if not is_erpnext_customer_enabled():
+		frappe.throw(_("ERPNext integration is turned off in CRM Settings."))
+
+	existing = frappe.db.get_value(DEAL, deal, "erpnext_customer")
+	if existing and frappe.db.exists("Customer", existing):
+		return {"customer": existing, "customer_error": None, "duplicate_customer": None}
+
+	return _run_customer_setup(
+		deal,
+		customer_answers,
+		contact_customer_answers,
+		customer_address,
+		customer_overrides,
+		confirm_duplicate_customer,
+	)
+
+
+def _run_customer_setup(
+	deal_name, customer_answers, contact_customer_answers, customer_address, customer_overrides, confirm
+) -> dict:
+	"""``{"customer": name | None, "customer_error": message | None, "duplicate_customer": name | None}``.
+
+	Runs inside a savepoint, not a commit/rollback pair: on failure this undoes
+	only the Customer/Address/Contact changes attempted below, leaving the Deal
+	conversion (already part of this same transaction) and everything before it
+	untouched — whether the request goes on to commit normally or, inside the
+	test runner, gets rolled back wholesale by the test's own transaction.
+	"""
+	result = {"customer": None, "customer_error": None, "duplicate_customer": None}
 	save_point = "pranera_customer_setup"
 	frappe.db.savepoint(save_point)
 	try:
-		result = erpnext_customer.create(
+		created = erpnext_customer.create(
 			deal=deal_name,
 			organization_answers=_parse_dict(customer_answers),
 			contact_answers=_parse_dict(contact_customer_answers),
@@ -375,19 +418,20 @@ def _setup_customer(
 		)
 	except erpnext_customer.DuplicateCustomerName as e:
 		frappe.db.rollback(save_point=save_point)
-		response["duplicate_customer"] = e.existing_customer
-		return
+		result["duplicate_customer"] = e.existing_customer
+		return result
 	except Exception as e:  # noqa: BLE001 - deliberately broad: never let this undo the Deal conversion
 		frappe.db.rollback(save_point=save_point)
 		frappe.log_error(title="Pranera CRM: ERPNext customer setup failed")
 		if isinstance(e, frappe.ValidationError):
-			response["customer_error"] = frappe.utils.strip_html(str(e))
+			result["customer_error"] = frappe.utils.strip_html(str(e))
 		else:
-			response["customer_error"] = _("Could not set up the ERPNext customer. Please try again from the deal.")
-		return
+			result["customer_error"] = _("Could not set up the ERPNext customer. Please try again from the deal.")
+		return result
 
 	frappe.db.release_savepoint(save_point)
-	response["customer"] = result["customer"]
+	result["customer"] = created["customer"]
+	return result
 
 
 def _parse_dict(value) -> dict:
