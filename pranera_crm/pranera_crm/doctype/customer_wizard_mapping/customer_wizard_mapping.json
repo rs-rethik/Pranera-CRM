@@ -10,6 +10,7 @@
   "label",
   "scope",
   "enabled",
+  "is_mandatory",
   "column_break_basic",
   "target_doctype",
   "target_fieldname",
@@ -24,6 +25,7 @@
   "section_break_branching",
   "depends_on_question",
   "depends_on_option",
+  "depends_on_operator",
   "column_break_branching",
   "fallback_value",
   "sequence",
@@ -57,6 +59,14 @@
    "label": "Applies To",
    "options": "Organization\nContact",
    "reqd": 1
+  },
+  {
+   "default": "0",
+   "description": "The user must answer this question (or it resolves via a default answer / fallback value) before the wizard can submit.",
+   "fieldname": "is_mandatory",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Mandatory"
   },
   {
    "default": "1",
@@ -163,6 +173,15 @@
    "label": "Only When Answer Is"
   },
   {
+   "default": "Is",
+   "depends_on": "eval:doc.depends_on_question",
+   "description": "\"Is not\" shows this question for every answer of the parent except the one above, e.g. an Overseas GST category for every country except India. An unanswered parent hides the question either way.",
+   "fieldname": "depends_on_operator",
+   "fieldtype": "Select",
+   "label": "Match",
+   "options": "Is\nIs not"
+  },
+  {
    "fieldname": "column_break_branching",
    "fieldtype": "Column Break"
   },
@@ -194,7 +213,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-09-22 00:00:00.000000",
+ "modified": "2026-09-22 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Pranera CRM",
  "name": "Customer Wizard Mapping",

@@ -3,7 +3,7 @@ import frappe
 from crm.tests import CRMTestCase
 from pranera_crm import customer_wizard as cw
 from pranera_crm import erpnext_customer as ec
-from pranera_crm.api import convert, setup_customer_for_deal
+from pranera_crm.api import convert, get_wizard_context, setup_customer_for_deal
 from pranera_crm.tests.test_api import _hash, deal_status, make_lead, make_org, make_user
 from pranera_crm.tests.test_customer_wizard import isolate_from_seed_questions, make_question
 
@@ -284,6 +284,34 @@ class TestErpnextCustomerCreate(CRMTestCase):
 		with self.assertRaises(frappe.PermissionError):
 			ec.create(deal=deal.name, organization_answers={}, contact_answers={}, address={})
 
+	def test_gstin_already_used_by_another_customer_is_blocked(self):
+		# checksum-valid (state 27 = Maharashtra)
+		gstin = "27AAPFU0939F1ZV"
+		holder = frappe.get_doc({"doctype": "Customer", "customer_name": f"GSTIN Holder {_hash()}"}).insert()
+		frappe.get_doc(
+			{
+				"doctype": "Address",
+				"address_title": holder.customer_name,
+				"address_type": "Billing",
+				"address_line1": "9 Old Street",
+				"city": "Mumbai",
+				"country": "India",
+				"state": "Maharashtra",
+				"gstin": gstin,
+				"links": [{"link_doctype": "Customer", "link_name": holder.name}],
+			}
+		).insert()
+
+		deal = make_deal(organization=make_org().name, contact=make_contact().name)
+		with self.assertRaises(frappe.ValidationError) as raised:
+			ec.create(
+				deal=deal.name,
+				organization_answers={},
+				contact_answers={},
+				address={"address_line1": "1 MG Road", "city": "Mumbai", "state": "Maharashtra", "country": "India", "gstin": gstin},
+			)
+		self.assertIn(holder.name, str(raised.exception))
+
 
 class TestSetupCustomerForDeal(CRMTestCase):
 	"""The standalone retry/confirm endpoint used after `convert` reports
@@ -362,3 +390,97 @@ class TestSetupCustomerForDeal(CRMTestCase):
 		set_erpnext_bridge(False)
 		with self.assertRaises(frappe.ValidationError):
 			setup_customer_for_deal(response["deal"])
+
+
+class TestLookupGstin(CRMTestCase):
+	def setUp(self):
+		frappe.set_user("Administrator")
+
+	def tearDown(self):
+		frappe.set_user("Administrator")
+		frappe.db.rollback()
+
+	def test_maps_gstin_info_into_business_name_and_address(self):
+		from unittest.mock import patch
+
+		fake_response = frappe._dict(
+			{
+				"business_name": "Acme Traders",
+				"gst_category": "Registered Regular",
+				"status": "Active",
+				"permanent_address": {
+					"address_line1": "1 MG Road",
+					"address_line2": "",
+					"city": "Chennai",
+					"state": "Tamil Nadu",
+					"pincode": "600001",
+					"country": "India",
+				},
+			}
+		)
+		with patch("india_compliance.gst_india.utils.gstin_info.get_gstin_info", return_value=fake_response) as mocked:
+			result = ec.lookup_gstin("33AAFCA7488L1Z0")
+
+		mocked.assert_called_once_with("33AAFCA7488L1Z0", throw_error=True)
+		self.assertEqual(result["business_name"], "Acme Traders")
+		self.assertEqual(result["gst_category"], "Registered Regular")
+		self.assertEqual(result["address"]["city"], "Chennai")
+		self.assertEqual(result["address"]["state"], "Tamil Nadu")
+
+	def test_missing_permanent_address_returns_blank_address(self):
+		from unittest.mock import patch
+
+		fake_response = frappe._dict({"business_name": "Solo Trader", "gst_category": "Unregistered"})
+		with patch("india_compliance.gst_india.utils.gstin_info.get_gstin_info", return_value=fake_response):
+			result = ec.lookup_gstin("33AAFCA7488L1Z0")
+
+		self.assertEqual(result["business_name"], "Solo Trader")
+		self.assertEqual(result["address"], {k: ("India" if k == "country" else "") for k in ["address_line1", "address_line2", "city", "state", "pincode", "country"]})
+
+	def test_permission_denied_without_customer_read(self):
+		user = make_user(roles=[], prefix="cw-gstin-noperm")
+		frappe.set_user(user)
+		with self.assertRaises(frappe.PermissionError):
+			ec.lookup_gstin("33AAFCA7488L1Z0")
+
+
+class TestWizardContextIncludesAllQuestions(CRMTestCase):
+	"""Regression test: get_wizard_context must send every enabled question, not just
+	the ones visible with an empty answer set — otherwise a follow-up question (e.g.
+	"Regular or Composition?") can never be revealed client-side once its parent is
+	answered, because the client only branches over what it was given."""
+
+	def setUp(self):
+		frappe.set_user("Administrator")
+		set_erpnext_bridge(True)
+		isolate_from_seed_questions()
+
+	def tearDown(self):
+		frappe.set_user("Administrator")
+		set_erpnext_bridge(True)
+		frappe.db.rollback()
+
+	def test_conditional_follow_up_question_is_included_up_front(self):
+		parent = make_question(
+			question_key=f"_ctx_parent_{_hash()}",
+			options=[
+				{"option_label": "Yes", "option_value": "yes"},
+				{"option_label": "No", "option_value": "no", "mapped_value": "Unregistered"},
+			],
+		)
+		child = make_question(
+			question_key=f"_ctx_child_{_hash()}",
+			depends_on_question=parent.name,
+			depends_on_option="yes",
+			options=[{"option_label": "Regular", "option_value": "regular", "mapped_value": "Registered Regular"}],
+		)
+
+		lead = make_lead()
+		ctx = get_wizard_context(lead.name)
+		keys = [q["question_key"] for q in ctx["customer"]["organization_questions"]]
+		self.assertIn(parent.question_key, keys)
+		self.assertIn(child.question_key, keys)  # present even though not yet visible
+
+		child_payload = next(q for q in ctx["customer"]["organization_questions"] if q["question_key"] == child.question_key)
+		self.assertEqual(child_payload["depends_on_question"], parent.name)
+		self.assertEqual(child_payload["depends_on_option"], "yes")

@@ -271,3 +271,151 @@ class TestCustomerWizardMappingValidation(CRMTestCase):
 				options=[{"option_label": "Yes", "option_value": "yes"}],
 				override_roles="Not A Real Role",
 			)
+
+
+class TestMandatoryAndOperatorRules(CRMTestCase):
+	"""The mandatory flag and the "Is not" branching operator added to the engine."""
+
+	def setUp(self):
+		frappe.set_user("Administrator")
+		isolate_from_seed_questions()
+
+	def tearDown(self):
+		frappe.set_user("Administrator")
+		frappe.db.rollback()
+
+	def test_is_not_operator(self):
+		parent = make_question(
+			options=[
+				{"option_label": "India", "option_value": "india"},
+				{"option_label": "Elsewhere", "option_value": "elsewhere"},
+			],
+		)
+		child = make_question(
+			target_doctype="Customer",
+			target_fieldname="gst_category",
+			depends_on_question=parent.question_key,
+			depends_on_option="india",
+			depends_on_operator="Is not",
+			options=[{"option_label": "Overseas", "option_value": "overseas", "mapped_value": "Overseas"}],
+		)
+
+		self.assertTrue(cw.is_visible(child, {parent.question_key: "elsewhere"}))
+		self.assertFalse(cw.is_visible(child, {parent.question_key: "india"}))
+		# an unanswered parent hides the follow-up for both operators
+		self.assertFalse(cw.is_visible(child, {}))
+
+	def test_is_not_resolution(self):
+		parent = make_question(
+			options=[
+				{"option_label": "India", "option_value": "india"},
+				{"option_label": "Elsewhere", "option_value": "elsewhere"},
+			],
+		)
+		child = make_question(
+			target_doctype="Customer",
+			target_fieldname="gst_category",
+			depends_on_question=parent.question_key,
+			depends_on_option="india",
+			depends_on_operator="Is not",
+			options=[{"option_label": "Overseas", "option_value": "overseas", "mapped_value": "Overseas"}],
+		)
+		result = cw.resolve("Organization", {parent.question_key: "elsewhere", child.question_key: "overseas"})
+		self.assertEqual(result["fields"]["Customer"]["gst_category"], "Overseas")
+		# parent answered India -> child invisible -> nothing resolved from it
+		result = cw.resolve("Organization", {parent.question_key: "india", child.question_key: "overseas"})
+		self.assertNotIn("Customer", result["fields"])
+
+	def test_mandatory_blocks_when_unanswered(self):
+		# two answers and no default: nothing auto-applies, so it must be answered
+		make_question(
+			is_mandatory=1,
+			options=[
+				{"option_label": "A", "option_value": "a", "mapped_value": "Commercial"},
+				{"option_label": "B", "option_value": "b", "mapped_value": "Individual"},
+			],
+		)
+		with self.assertRaises(frappe.ValidationError):
+			cw.resolve("Organization", {})
+
+	def test_mandatory_satisfied_by_fallback(self):
+		q = make_question(
+			is_mandatory=1,
+			fallback_value="Unregistered",
+			options=[
+				{"option_label": "Yes", "option_value": "yes"},
+				{"option_label": "No", "option_value": "no"},
+			],
+		)
+		result = cw.resolve("Organization", {})
+		row = next(r for r in result["review"] if r["question_key"] == q.question_key)
+		self.assertTrue(row["was_fallback"])
+		self.assertEqual(row["value"], "Unregistered")
+
+	def test_mandatory_satisfied_by_default_answer(self):
+		q = make_question(
+			is_mandatory=1,
+			options=[
+				{"option_label": "Only", "option_value": "only", "mapped_value": "Unregistered", "is_default": 1},
+				{"option_label": "Other", "option_value": "other", "mapped_value": "Registered Regular"},
+			],
+		)
+		result = cw.resolve("Organization", {})
+		row = next(r for r in result["review"] if r["question_key"] == q.question_key)
+		self.assertEqual(row["value"], "Unregistered")
+
+	def test_answered_option_without_mapped_value_still_satisfies_mandatory(self):
+		# an overlay no-op answer is still an answer
+		q = make_question(
+			is_mandatory=1,
+			options=[
+				{"option_label": "Yes", "option_value": "yes"},
+				{"option_label": "No", "option_value": "no", "mapped_value": "Unregistered"},
+			],
+		)
+		result = cw.resolve("Organization", {q.question_key: "yes"})
+		row = next(r for r in result["review"] if r["question_key"] == q.question_key)
+		self.assertFalse(row["was_fallback"])
+
+	def test_unknown_fixed_answer_rejected(self):
+		q = make_question(
+			options=[{"option_label": "No", "option_value": "no", "mapped_value": "Unregistered"}],
+		)
+		with self.assertRaises(frappe.ValidationError):
+			cw.resolve("Organization", {q.question_key: "not-a-configured-answer"})
+
+	def test_payload_carries_mandatory_operator_and_fallback(self):
+		q = make_question(
+			is_mandatory=1,
+			fallback_value="INR",
+			options=[{"option_label": "INR", "option_value": "inr", "mapped_value": "INR"}],
+		)
+		payload = cw.question_payload(q, {})
+		self.assertTrue(payload["is_mandatory"])
+		self.assertEqual(payload["depends_on_operator"], "Is")
+		self.assertEqual(payload["fallback_value"], "INR")
+
+	def test_payload_carries_target_meta_and_mapped_values(self):
+		"""The Review step shows resolved values, not questions: it needs the target
+		field's meta and each answer's mapped value."""
+		q = make_question(
+			target_doctype="Customer",
+			target_fieldname="customer_group",
+			options=[{"option_label": "Commercial", "option_value": "commercial", "mapped_value": "Commercial"}],
+		)
+		payload = cw.question_payload(q, {})
+		self.assertEqual(payload["target_label"], "Customer Group")
+		self.assertEqual(payload["target_fieldtype"], "Link")
+		self.assertEqual(payload["target_field_options"], "Customer Group")
+		self.assertEqual(payload["options"][0]["mapped_value"], "Commercial")
+
+		sp = make_question(
+			target_doctype="Customer",
+			target_fieldname="sales_team",
+			question_type="Dynamic",
+			source_doctype="Sales Person",
+		)
+		payload = cw.question_payload(sp, {})
+		self.assertEqual(payload["target_label"], "Sales Person")
+		self.assertEqual(payload["target_fieldtype"], "Link")
+		self.assertEqual(payload["target_field_options"], "Sales Person")

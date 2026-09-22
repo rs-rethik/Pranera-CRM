@@ -11,6 +11,8 @@ resolving the user's plain-language answers against the admin-configured
 Territory, GST Category, or similar business value.
 """
 
+import re
+
 import frappe
 from frappe import _
 from frappe.utils import cint
@@ -25,6 +27,10 @@ ORGANIZATION = "CRM Organization"
 
 # Plain fields the user types directly (not resolved from a mapping question).
 ADDRESS_INPUT_FIELDS = ("address_line1", "address_line2", "city", "pincode", "country", "state", "gstin")
+
+# Used only when india_compliance isn't installed, to give the same format check
+# its own validators would have made.
+GSTIN_FORMAT = re.compile(r"^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$")
 
 
 class DuplicateCustomerName(Exception):
@@ -56,6 +62,40 @@ def address_field_meta() -> list[dict]:
 	return out
 
 
+@frappe.whitelist()
+def lookup_gstin(gstin: str) -> dict:
+	"""Fetch the registered business name and address for a GSTIN from the GST
+	public search (via india_compliance), so the user doesn't have to type them.
+
+	Only the values the caller asked to auto-fill are read from the response —
+	nothing here is written to any doctype directly. The organization/address the
+	user reviews and submits are still whatever ends up in the wizard's form.
+	"""
+	try:
+		from india_compliance.gst_india.utils.gstin_info import get_gstin_info
+	except ImportError:
+		frappe.throw(_("GSTIN lookup needs the India Compliance app, which isn't installed."))
+
+	if not frappe.has_permission(CUSTOMER, "read"):
+		frappe.throw(_("Not allowed"), frappe.PermissionError)
+
+	info = get_gstin_info(gstin, throw_error=True)
+	address = info.get("permanent_address") or {}
+	return {
+		"business_name": info.get("business_name") or "",
+		"gst_category": info.get("gst_category") or "",
+		"status": info.get("status") or "",
+		"address": {
+			"address_line1": address.get("address_line1") or "",
+			"address_line2": address.get("address_line2") or "",
+			"city": address.get("city") or "",
+			"state": address.get("state") or "",
+			"pincode": address.get("pincode") or "",
+			"country": address.get("country") or "India",
+		},
+	}
+
+
 def get_context(organization: str | None) -> dict:
 	"""Everything the wizard needs to render the "set up this customer in ERPNext"
 	section: whether it applies, the live questions, and a heads-up if a Customer
@@ -68,8 +108,8 @@ def get_context(organization: str | None) -> dict:
 
 	return {
 		"enabled": True,
-		"organization_questions": cw.scope_payload("Organization", {}),
-		"contact_questions": cw.scope_payload("Contact", {}),
+		"organization_questions": cw.all_questions_payload("Organization"),
+		"contact_questions": cw.all_questions_payload("Contact"),
 		"address_fields": address_field_meta(),
 		"existing_customer": (
 			frappe.db.exists(CUSTOMER, {"customer_name": organization}) if organization else None
@@ -115,8 +155,8 @@ def create(
 
 	org_result = cw.resolve("Organization", organization_answers, overrides)
 	contact_result = cw.resolve("Contact", contact_answers, overrides)
-	_validate_resolved_links(org_result["fields"])
-	_validate_resolved_links(contact_result["fields"])
+	_validate_resolved_fields(org_result["fields"])
+	_validate_resolved_fields(contact_result["fields"])
 	_validate_gst(org_result["fields"].get(CUSTOMER, {}), org_result["fields"].get(ADDRESS, {}), address)
 	_mirror_gst_category_to_customer(org_result["fields"])
 
@@ -127,6 +167,12 @@ def create(
 	existing = frappe.db.exists(CUSTOMER, {"customer_name": customer_name})
 	if existing and not confirm_duplicate:
 		raise DuplicateCustomerName(existing)
+
+	# same GSTIN on another customer's address is almost always the same business
+	# entered twice; reuse happens through the duplicate-name flow, not silently
+	gstin = (address or {}).get("gstin")
+	if gstin:
+		_validate_gstin_duplicate(gstin, exclude=existing)
 
 	customer = frappe.get_doc(CUSTOMER, existing) if existing else frappe.new_doc(CUSTOMER)
 	customer.customer_name = customer_name
@@ -166,17 +212,29 @@ def create(
 	}
 
 
-def _validate_resolved_links(fields_by_doctype: dict):
+def _validate_resolved_fields(fields_by_doctype: dict):
+	"""Every resolved/overridden value must be something the target field can
+	actually hold: Link values must exist as records, Select values must be one
+	of the field's options. A mis-configured mapping (or a tampered override
+	value) is blocked here instead of failing deep inside insert()."""
 	for doctype, fields in fields_by_doctype.items():
 		meta = frappe.get_meta(doctype)
 		for fieldname, value in fields.items():
 			field = meta.get_field(fieldname)
-			if field and field.fieldtype == "Link" and value:
+			if not field or not value:
+				continue
+			if field.fieldtype == "Link":
 				if not frappe.db.exists(field.options, value):
 					frappe.throw(
 						_("{0} {1} does not exist (from {2}.{3})").format(
 							_(field.options), value, doctype, fieldname
 						)
+					)
+			elif field.fieldtype == "Select":
+				options = [o.strip() for o in (field.options or "").split("\n") if o.strip()]
+				if options and value not in options:
+					frappe.throw(
+						_("{0} is not a valid value for {1}.{2}").format(value, doctype, fieldname)
 					)
 
 
@@ -192,18 +250,52 @@ def _mirror_gst_category_to_customer(fields_by_doctype: dict):
 
 
 def _validate_gst(customer_fields: dict, address_fields: dict, address_input: dict):
+	gstin = (address_input or {}).get("gstin")
+	if gstin:
+		try:
+			from india_compliance.gst_india.utils import validate_gstin
+
+			validate_gstin(gstin)
+		except ImportError:
+			# no canonical validators without the app; still enforce the format
+			if not GSTIN_FORMAT.match(gstin):
+				frappe.throw(_("{0} is not a valid GSTIN").format(gstin))
+
+	gst_category = None
 	try:
-		from india_compliance.gst_india.utils import validate_gst_category, validate_gstin
+		from india_compliance.gst_india.utils import validate_gst_category
+
+		gst_category = address_fields.get("gst_category") or customer_fields.get("gst_category")
+		if gst_category:
+			validate_gst_category(gst_category, gstin)
 	except ImportError:
 		return
 
-	gstin = (address_input or {}).get("gstin")
-	if gstin:
-		validate_gstin(gstin)
 
-	gst_category = address_fields.get("gst_category") or customer_fields.get("gst_category")
-	if gst_category:
-		validate_gst_category(gst_category, gstin)
+def _validate_gstin_duplicate(gstin: str, exclude: str | None):
+	"""Block a GSTIN that already belongs to a *different* Customer's address
+	(GSTINs live on Address; several customers sharing one is a decision an
+	admin makes deliberately in ERPNext, not through the wizard)."""
+	others = [name for name in _customers_with_gstin(gstin) if name != exclude]
+	if others:
+		frappe.throw(
+			_("GSTIN {0} is already used by customer {1}").format(gstin, ", ".join(others)),
+			title=_("Possible Duplicate"),
+		)
+
+
+def _customers_with_gstin(gstin: str) -> list[str]:
+	names: list[str] = []
+	addresses = frappe.get_all(ADDRESS, filters={"gstin": gstin}, pluck="name")
+	if addresses:
+		names = frappe.get_all(
+			"Dynamic Link",
+			filters={"parenttype": ADDRESS, "parent": ["in", addresses], "link_doctype": CUSTOMER},
+			pluck="link_name",
+		)
+	if frappe.get_meta(CUSTOMER).has_field("gstin"):
+		names += frappe.get_all(CUSTOMER, filters={"gstin": gstin}, pluck="name")
+	return sorted(set(names))
 
 
 def _primary_contact_name(deal_doc) -> str | None:

@@ -1,5 +1,6 @@
 import { __ } from '@/translation'
 import { flattenLayout, isClientRequired, isEmpty } from './layout'
+import { unansweredMandatory } from './questions'
 
 export const STEPS = [
   { key: 'organization', label: 'Organization' },
@@ -25,6 +26,21 @@ export function validateStep(index, form, ctx) {
     } else if (!isEmpty(org.values.annual_revenue) && Number(org.values.annual_revenue) < 0) {
       errors.annual_revenue = __('Annual revenue cannot be negative')
     }
+
+    // Address is entirely optional, but once started (address_line1 given) it must
+    // be complete enough for Address's own core requirements.
+    const address = form.customer?.address
+    if (form.customer?.enabled && address && !isEmpty(address.address_line1)) {
+      if (isEmpty(address.city)) errors.customer_city = __('{0} is required', [__('City')])
+      if (isEmpty(address.country)) errors.customer_country = __('{0} is required', [__('Country')])
+    }
+
+    // mapping questions flagged Mandatory must be answered before moving on
+    if (form.customer?.enabled) {
+      for (const q of unansweredMandatory(ctx?.customer?.organization_questions, form.customer.answers)) {
+        errors[`cq_${q.question_key}`] = __('{0} is required', [q.label])
+      }
+    }
   }
 
   if (index === 1) {
@@ -37,6 +53,11 @@ export function validateStep(index, form, ctx) {
       }
       const email = contact.values.email
       if (!isEmpty(email) && !EMAIL.test(String(email).trim())) errors.email = __('Enter a valid email address')
+    }
+    if (form.customer?.enabled) {
+      for (const q of unansweredMandatory(ctx?.customer?.contact_questions, form.customer.contactAnswers)) {
+        errors[`cq_${q.question_key}`] = __('{0} is required', [q.label])
+      }
     }
   }
 

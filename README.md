@@ -1,14 +1,22 @@
 # Pranera CRM
 
 A full-page, step-by-step **Convert to Deal** wizard for [Frappe CRM](https://github.com/frappe/crm),
-installable as a PWA. It lives entirely in this app; nothing under `apps/crm` is modified.
+installable as a PWA, that can also set up the matching **ERPNext Customer/Address/Contact** —
+every ERPNext link field (Customer Group, Territory, GST Category, Payment Terms, Sales Person, …) is
+chosen through a plain-language question rather than picked from a raw master record, using an
+admin-configurable mapping (`Customer Wizard Mapping`), never hardcoded. It lives entirely in this app;
+nothing under `apps/crm` is modified. Requires **erpnext** and **crm**.
 
 * Route: `/deal_wizard/<lead>` (`?step=1..4`); `/deal_wizard/` lists open leads and local drafts.
-* Steps: **1 Organization** (use existing / create new) → **2 Contact** (use existing / create new) →
+* Steps: **1 Organization** (use existing / create new, + the ERPNext Customer/Address questions) →
+  **2 Contact** (use existing / create new, + a Designation question) →
   **3 Deal details** (rendered from CRM's *Required Fields* layout for CRM Deal, never hardcoded) →
-  **4 Review & confirm**.
+  **4 Review & confirm** (including a Question → Answer → Assigned value table for the Customer, with
+  role-gated override).
 * The actual conversion is done by CRM's own `convert_to_deal`; this app never reimplements it and
-  never uses `ignore_permissions`.
+  never uses `ignore_permissions`. The ERPNext Customer step similarly never uses `ignore_permissions`
+  and replaces CRM's own bare-bones, error-swallowing ERPNext bridge (see below) with an all-or-nothing
+  one that reports errors clearly and never loses the Deal conversion.
 
 **UI.** The look follows Frappe's own setup wizard: a centred card with progress dots above it, a centred
 title, compact stock frappe-ui inputs and small *Back* / *Next* buttons inside the card. There is no custom
@@ -20,16 +28,26 @@ Tested against Frappe 15.121 / Frappe CRM 1.84.
 
 ## Install
 
+Requires **erpnext** installed on the site (`required_apps = ["crm", "erpnext"]`) and, for the GST questions,
+**india_compliance**:
+
 ```bash
 cd /home/rethik/frappe-bench-15
+bench get-app india_compliance https://github.com/resilient-tech/india-compliance --branch version-15
 bench get-app pranera_crm <repo-or-path>        # skip if the app is already in apps/
+bench --site pranera.site install-app india_compliance
 bench --site pranera.site install-app pranera_crm
 bench build --app pranera_crm                   # links assets; the Vue build is committed (see below)
-bench --site pranera.site migrate               # imports the Form Script fixture, clears hook caches
+bench --site pranera.site migrate               # imports fixtures (Form Script, GST Category question seed), clears hook caches
 bench restart                                    # or restart `bench start`
 ```
 
+Match the `--branch` to your Frappe version. Without India Compliance the app still installs and works, but
+the seeded GST questions (which target `Address.gst_category`/`gstin`) will fail their own validation —
+disable or repoint them (see *ERPNext Customer* below).
+
 Open a lead in CRM and press **Convert to Deal** (needs *Enable Convert to Deal Wizard* ticked, which is the default), or go to `/deal_wizard/<lead name>`.
+The ERPNext Customer section additionally needs *ERPNext CRM Settings > Enabled* ticked (`/app/erpnext-crm-settings`, part of Frappe CRM — nothing this app adds).
 
 > **HTTPS.** Service workers (and therefore installing the PWA) only work on `https://` or on
 > `localhost`. Over plain `http://pranera.site:8002` the wizard works but is not installable.
@@ -68,11 +86,16 @@ yarn dev       # Vite dev server on port 8082 (webserver_port 8002 + 80), proxyi
 
 | Method | Purpose |
 | --- | --- |
-| `get_wizard_context(lead)` | Read permission check; returns lead prefill data, candidate Organizations (name/website) and Contacts (email/phone/mobile), which of them CRM would silently reuse (`auto_organization`, `auto_contact`), the Deal quick-entry layout (`get_fields_layout("CRM Deal", "Required Fields")`), lead→deal defaults, deal statuses, and `converted` / `lost` / `can_write`. |
+| `get_wizard_context(lead)` | Read permission check; returns lead prefill data, candidate Organizations (name/website) and Contacts (email/phone/mobile), which of them CRM would silently reuse (`auto_organization`, `auto_contact`), the Deal quick-entry layout (`get_fields_layout("CRM Deal", "Required Fields")`), lead→deal defaults, deal statuses, `converted` / `lost` / `can_write`, and `customer` (the ERPNext Customer section context — see below). |
 | `search_candidates(lead, …)` | Re-runs the matching for values the user edited. |
-| `convert(lead, deal, existing_contact, existing_organization, lead_updates)` | POST only. Checks write permission, locks the lead row, rejects already-converted (`LeadAlreadyConverted`) and Lost leads, validates existing records are readable, whitelists the deal payload to the quick-entry layout fields (never `lead`, `contacts`, `organization`, `owner`, …), checks required deal fields, applies `lead_updates`, then calls CRM's `convert_to_deal`. Returns the new deal name. |
+| `convert(lead, deal, existing_contact, existing_organization, lead_updates, setup_customer, customer_answers, contact_customer_answers, customer_address, customer_overrides, confirm_duplicate_customer)` | POST only. Checks write permission, locks the lead row, rejects already-converted (`LeadAlreadyConverted`) and Lost leads, validates existing records are readable, whitelists the deal payload to the quick-entry layout fields (never `lead`, `contacts`, `organization`, `owner`, …), checks required deal fields, applies `lead_updates`, then calls CRM's `convert_to_deal`. If `setup_customer` and the ERPNext bridge is on, also runs the Customer step (see below). Returns `{"deal": name, "customer": name \| None, "customer_error": message \| None, "duplicate_customer": name \| None}`. |
+| `setup_customer_for_deal(deal, …)` | POST only. Runs (or retries) *just* the ERPNext Customer step for an already-converted deal — used after `convert` reports `duplicate_customer` or `customer_error`, so the Deal is never re-converted. Idempotent: if the deal already has a linked Customer, returns it without redoing anything. |
 | `wizard_enabled()` | Is *Enable Convert to Deal Wizard* ticked? Used by the Lead page's Form Script. The other wizard APIs refuse with `WizardDisabled` when it is off. |
 | `whoami()` | Guest-callable; lets the SPA tell an expired session from a genuine 403. |
+
+`pranera_crm/erpnext_customer.py` additionally exposes `lookup_gstin(gstin)` (fetches a business name + address
+from the GST public search via India Compliance, for the *Fetch* button) and `refresh_questions(scope, answers)`
+(re-resolves a Dynamic question's live options as other answers change).
 
 **Why `lead_updates`?** `convert_to_deal` builds a *new* Organization/Contact purely from the Lead's own
 fields and accepts nothing else. So when the user chooses "Create new" and edits the values in steps 1-2,
@@ -131,6 +154,96 @@ and register `/assets/pranera_crm/frontend/sw.js` with `{ scope: '/deal_wizard/'
 Saved per user and lead in IndexedDB (localStorage fallback, plus a synchronous copy on page hide/unload),
 debounced, restored on load ("Draft restored… Start over"), listed on `/deal_wizard/`, expired after 30 days
 and cleared after a successful conversion.
+
+## ERPNext Customer (question-driven, no raw pickers)
+
+Converting a lead can also set up the matching ERPNext **Customer** (+ its **Address** and **Contact**),
+appearing as an extra section in the Organization/Contact steps whenever *ERPNext CRM Settings > Enabled*
+is on (the toggle CRM itself already ships — no new switch of ours). Every ERPNext link field is chosen
+through a plain-language question; nothing is hardcoded.
+
+### Why not just use CRM's own ERPNext bridge?
+
+CRM ships `ERPNext CRM Settings` / `create_customer_from_deal`, which delegates to
+`erpnext.crm.frappe_crm_api.create_customer`. That function only sets 7 fields (name, group, type,
+territory, currency, industry, website — no GST, no Payment Terms, no Sales Person), and on **any**
+failure it does `except Exception: frappe.log_error(...); pass` — silently discarding the error and
+sometimes leaving a half-created Customer with no way for the user to know something went wrong. This app
+replaces that path with its own (`pranera_crm/erpnext_customer.py`), reusing CRM's own `crm_deal` /
+`erpnext_customer` cross-link fields so CRM's "View Customer" button and its lazy dedup on Sales Order
+creation keep working unchanged — CRM's bridge itself is never modified or disabled.
+
+### `Customer Wizard Mapping` — the question ↔ value config
+
+A doctype (`/app/customer-wizard-mapping`), not a fixture-only concept — admins add, edit or disable
+questions from the Desk like any other list. Each row is one question:
+
+| Field | Meaning |
+| --- | --- |
+| `scope` | `Organization` or `Contact` — which wizard step it renders in. |
+| `target_doctype` / `target_fieldname` | Which field the answer is written to (e.g. `Address.gst_category`). Checked against real doctype metadata on save; `Customer.sales_team` is special-cased (see below). |
+| `question_type` | **Fixed**: a curated list of answers you define (child table `options`, each with a business-friendly `option_label` and the `mapped_value` actually written — leave `mapped_value` blank for an answer that only triggers a follow-up, see *overlay* below). **Dynamic**: a live, filtered list of records from another doctype (e.g. enabled Sales Persons) — still a picked list, never a raw search box. |
+| `depends_on_question` / `depends_on_option` / `depends_on_operator` | Branching: this question only appears once the named question was answered a particular way. `Is` (default) matches one answer; `Is not` shows the question for every *other* answer (e.g. an Overseas category for every country except India). An unanswered parent hides the question either way. |
+| `fallback_value` | Used, and flagged on the Review step, when the user's path leaves this field unanswered. |
+| `is_mandatory` | The wizard blocks *Next*/submit until this question resolves something (an answer, a default, or a fallback) — used for the questions that must never be left blank. |
+| `sequence` | Resolution/display order. Two questions targeting the *same* field combine by **overlay**: later ones win, but only when their chosen answer actually has a `mapped_value` — this is how "Regular or Composition?" and "Is it an SEZ unit?" (both writing `gst_category`) combine without a multi-answer combinator. |
+| `override_roles` | Roles (one per line) allowed to override the resolved value on the Review step; everyone else sees a read-only result. |
+
+Resolution (`pranera_crm/customer_wizard.py:resolve`) always runs **server-side** at submit time from the raw
+answers — a tampered client payload can change which *answer* was picked, never what value that answer maps
+to. The frontend (`frontend/src/lib/questions.js`) mirrors the same rules for instant UI feedback (visibility,
+a live Review preview with the actual resolved values, grouped by Customer/Address/Contact) but is never
+trusted.
+
+**Shipped questions** (`pranera_crm/fixtures/customer_wizard_mapping.json`, freely editable): Customer Type,
+Customer Group, Territory, Currency, Payment Terms (pre-answered from a seeded `100% Advance` template — see
+`setup.py`), Address Type, GST Registered? → Regular/Composition → SEZ?, and Sales Person (Dynamic, filtered
+to `enabled=1, is_group=0`; ships with no Sales Person records, so the question is skipped with nothing
+assigned until you add some) for Organization; Designation for Contact. These use the real Customer
+Group/Territory records already on a fresh ERPNext install — add finer ones (e.g. per-state Territories) and
+point new answers at them with no code change.
+
+### GST (via India Compliance)
+
+Requires the `india_compliance` app (`bench get-app india_compliance --branch version-15`, matching this
+bench's Frappe 15 — pick the branch matching yours). It adds `gstin` (Autocomplete) and `gst_category`
+(Select, required) to Customer, and `gstin`/`gst_category`/`gst_state`/`gst_state_number` to Address, plus a
+free-text `state` on Address that becomes an Autocomplete once India Compliance is in.
+
+* **GST Category is written on Address**, not Customer (a business can be registered differently per
+  location) — `erpnext_customer.py` mirrors the resolved value onto `Customer.gst_category` too, since core
+  marks it required.
+* **GSTIN**: validated via India Compliance's own `validate_gstin` (checksum) and `validate_gst_category`
+  (e.g. a "Registered Regular" category needs an actual GSTIN) if the app is installed, else a regex format
+  check as a fallback. A GSTIN already used by a *different* Customer's address is blocked as a likely
+  duplicate entry (confirm through the *Duplicate customer* flow below if it's intentional).
+* **"Fetch" button**: next to the GSTIN field, calls `lookup_gstin` (India Compliance's public GST search) and
+  fills in the organization name and address fields that are still empty — never overwrites something you've
+  already typed, and the server re-validates everything at submit regardless of where it came from.
+* If India Compliance isn't installed, the GST question/fields simply don't exist on Address/Customer and any
+  mapping row targeting `gst_category`/`gstin` fails its own `validate_target_field` check — remove or disable
+  those seeded questions on a non-Indian deployment.
+
+### All-or-nothing, without losing the Deal (two-phase, via savepoint)
+
+The Customer/Address/Contact step runs in its own **savepoint**
+(`frappe.db.savepoint()` / `rollback(save_point=...)`), taken right after the Deal conversion. A failure —
+an invalid GST answer, a permission gap, anything — rolls back *only* the Customer/Address/Contact attempt;
+the Deal conversion is already part of the same transaction and is untouched either way, so the user never
+loses their conversion over a fixable data problem. The wizard shows the specific error with a **Try again**
+button (re-submits just the Customer step via `setup_customer_for_deal`) and a **Continue to deal** escape
+hatch. This is deliberately *not* one all-encompassing rollback: the original brief's "roll back everything"
+was written for a standalone Customer-only wizard, and treating a secondary ERPNext hiccup as fatal to the
+primary CRM action would be worse, not safer.
+
+**Duplicate customer name**: an exact `customer_name` match raises for confirmation (`duplicate_customer` in
+the response) rather than silently creating a second record or silently overwriting the existing one — the
+wizard offers **Use existing customer**, which resubmits with `confirm_duplicate_customer=True` and *links*
+the Deal to that Customer instead of creating a new one.
+
+**Reuse, not duplication**: the Contact already created by the wizard's own Contact step gets a second
+Dynamic Link row for the new Customer (not a duplicate Contact); the CRM Organization's existing `address`,
+if any, is reused the same way and back-filled onto the Organization if it had none.
 
 ## Site properties (theme, language, formats)
 
@@ -210,10 +323,32 @@ CI=1 bench --site pranera.site run-tests --app pranera_crm --skip-before-tests -
 cd apps/pranera_crm/frontend && yarn test && yarn lint
 ```
 
-Python tests (`pranera_crm/tests/test_api.py`) cover: permission denied, already converted (flag and deal),
-new org + new contact (with `lead_updates`), existing org + existing contact (edits ignored, nothing
-duplicated), Lost leads, deal payload whitelisting, missing required deal fields, unknown existing records,
-context permissions/candidates, and `whoami`. They run inside the test transaction and roll back.
+Python tests, all rolled back automatically at the end of each test:
+
+* `test_api.py` — permission denied, already converted (flag and deal), new org + new contact (with
+  `lead_updates`), existing org + existing contact (edits ignored, nothing duplicated), Lost leads, deal
+  payload whitelisting, missing required deal fields, unknown existing records, context
+  permissions/candidates, and `whoami`.
+* `test_customer_wizard.py` — the resolution engine directly: fixed/single-option auto-answer, fallback,
+  branching (`Is` / `Is not`, hidden grandchildren), the sequential overlay, Dynamic options + filter
+  interpolation, the `sales_team` special case, role-gated override, `is_mandatory` blocking, and every
+  `Customer Wizard Mapping.validate()` rule (unknown target field, table targets, duplicate/missing options,
+  bad Dynamic source, branching cycles/cross-scope, unknown override roles). Tests that call `resolve()`
+  first disable the seeded fixture questions (`isolate_from_seed_questions`) so they only see their own
+  ad-hoc ones.
+* `test_erpnext_customer.py` — end to end through `convert()`/`setup_customer_for_deal()`: full setup creates
+  a correctly-linked Customer/Address/Contact, GST validation failure leaves the Deal intact and retryable,
+  role-gated override, the disabled-bridge no-op, duplicate-name confirm-and-link and a duplicate-GSTIN block
+  (without touching the original Deal either way), reusing an Organization's existing Address / a Deal's
+  existing Contact (no duplicates), Sales Team row creation, permission denial, `lookup_gstin` (mocking India
+  Compliance's API), the retry endpoint's idempotency once a Customer is already linked, and a regression test
+  that `get_wizard_context` sends *every* question up front (not just the ones visible with no answers yet —
+  a follow-up question must still be there for the client to reveal later).
+
+Frontend (`frontend/tests/`): `wizard-logic.test.js` / `site-properties.test.js` (existing Deal Wizard
+behaviour) plus `questions.test.js` for `lib/questions.js` — the same branching/overlay/fallback/mandatory
+rules mirrored client-side, plus `resolvedFields`'s grouped, overlay-aware value computation for the Review
+step.
 
 ## Manual verification checklist
 
@@ -232,6 +367,27 @@ context permissions/candidates, and `whoami`. They run inside the test transacti
 4. **Offline.** DevTools → Network → Offline: the banner appears and *Convert* is disabled; go back online and it re-enables.
 5. **Service worker hygiene.** *Application → Cache Storage* shows `pranera-crm-*` caches only; `index.html` and `/api/*` are
    never in them. CRM at `/crm` still works and keeps its own worker.
+6. **ERPNext Customer, happy path.** With *ERPNext CRM Settings* enabled, convert a lead answering the GST
+   question chain ("Yes" → "Regular" → SEZ "No"), fill the Address (Country India needs a real `State`), and
+   submit. On the resulting Customer: `customer_type`/`customer_group`/`territory`/`default_currency`/
+   `payment_terms`/`gst_category` are set; its `customer_primary_address`/`customer_primary_contact` point at
+   an Address/Contact that also carry a `Customer` Dynamic Link row (check *Address → Links*); `crm_deal` on
+   the Customer and `erpnext_customer` on the CRM Deal cross-reference each other, and CRM's own **View
+   Customer** button (on the Deal) resolves to it.
+7. **GSTIN fetch and validation.** Type a GSTIN and press *Fetch* — organization name and address fields
+   populate (needs real internet access to the GST public API; a bad/unreachable lookup shows a clear inline
+   error, not a crash). Answer "GST Registered? Yes → Regular" but leave GSTIN blank and submit: the Deal
+   still converts, and you land on a "Try again" panel with India Compliance's own validation message.
+8. **Deal survives a Customer-step failure.** Reproduce #7's error, then check the CRM Deal directly — it
+   exists and is not rolled back, only the Customer/Address/Contact attempt is. Press **Try again** with a
+   valid GSTIN (or **Continue to deal** to skip it) and confirm no duplicate Customer/Address/Contact is left
+   behind either way.
+9. **Duplicate customer name.** Pre-create a Customer with the same name the wizard would use, then convert;
+   you land on **Use existing customer**, and afterwards the Deal is linked to that pre-existing Customer, not
+   a second one.
+10. **ERPNext CRM Settings disabled.** Untick *Enabled* and convert a lead: no Customer section appears, the
+    Deal converts exactly as before this feature existed, and `/deal_wizard/…` with the bridge off elsewhere
+    still behaves normally.
 
 ## Known limitations
 
@@ -242,3 +398,12 @@ context permissions/candidates, and `whoami`. They run inside the test transacti
 * If a "Create new" contact/organization would match an existing record, CRM links the existing one (see above);
   the wizard warns but cannot change that CRM behaviour.
 * Editing values in "Create new" modifies the CRM Lead (that is how CRM builds the new records).
+* One Customer, one Address, one Contact per conversion — no add/remove-multiple UI (a deliberate "Light"
+  scope: a Lead already has one organization and one primary contact).
+* A Dynamic question's live options are resolved once, from the answers known at page load; if you configure
+  one whose `source_filters` reference another question (e.g. suggest Sales Person by Territory), its option
+  list won't refresh automatically as that other question is answered — `refresh_questions` exists for this
+  and just isn't wired into the frontend yet, since no seeded question currently needs it.
+* Country is a plain searchable Link (like the existing Organization/Contact search), not a mapping question —
+  its ~250 entries are already the business terms, unlike Customer Group/GST Category where the right internal
+  value isn't obvious from the label alone.

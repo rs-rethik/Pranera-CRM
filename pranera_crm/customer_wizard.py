@@ -9,7 +9,8 @@ implements the *rules* by which answers become values:
   see "overlay" below).
 - **Dynamic** questions: the answer *is* a live record name from ``source_doctype``.
 - **Branching**: a question is only visible once its ``depends_on_question`` was
-  answered with ``depends_on_option``.
+  answered the right way — ``depends_on_operator`` ``Is`` (default) matches one
+  answer, ``Is not`` matches every other answer of the parent.
 - **Overlay**: visible questions are applied in ``sequence`` order; a question whose
   chosen answer has no ``mapped_value`` contributes nothing and leaves whatever an
   earlier question already wrote for that field alone. This is how two independent
@@ -17,6 +18,8 @@ implements the *rules* by which answers become values:
   combine onto the same field without a multi-answer combinator.
 - **Fallback**: a visible-but-unanswered question with no auto-selected default
   applies its ``fallback_value`` and is flagged for the Review step.
+- **Mandatory**: a question flagged ``is_mandatory`` that resolves nothing (no
+  answer, default, fallback or override) blocks submission with a clear error.
 
 Sales Person is special-cased: a question targeting ``Customer.sales_team`` (a child
 table) doesn't set a plain field, it names the Sales Person(s) to add as a
@@ -68,7 +71,12 @@ def is_visible(question, answers: dict) -> bool:
 	given = answers.get(parent.question_key)
 	if given is None:
 		given = default_answer(parent)
-	return given == question.depends_on_option
+	# an unanswered parent hides the follow-up for both operators: a question
+	# can't be shown "because" of an answer that doesn't exist yet
+	if given is None:
+		return False
+	matches = given == question.depends_on_option
+	return not matches if question.depends_on_operator == "Is not" else matches
 
 
 def visible_questions(scope: str, answers: dict) -> list:
@@ -118,6 +126,13 @@ def resolve(scope: str, answers: dict, overrides: dict | None = None, *, user: s
 
 		if question.question_type == "Fixed":
 			option = _option_row(question, given) if given is not None else None
+			if given is not None and option is None:
+				# not one of the configured answers: a stale client payload or a
+				# hand-crafted one — never silently map it to something
+				frappe.throw(
+					_("{0}: \"{1}\" is not one of the available answers").format(question.label, given),
+					title=_("Invalid Answer"),
+				)
 			answer_label = option.option_label if option else None
 			value = option.mapped_value if option else None
 		else:
@@ -133,6 +148,15 @@ def resolve(scope: str, answers: dict, overrides: dict | None = None, *, user: s
 		if can_override and question.question_key in overrides:
 			value = overrides[question.question_key] or None
 			answer_label = _("{0} (overridden)").format(value) if value else answer_label
+
+		# unanswered (no user answer, no default, no fallback, no override): a
+		# mandatory question blocks submission; an answered option that maps to
+		# nothing (overlay no-op) is still an answer
+		if question.is_mandatory and given is None and value is None:
+			frappe.throw(
+				_("{0}: please answer this question before submitting").format(question.label),
+				title=_("Answer Required"),
+			)
 
 		if value:
 			if (question.target_doctype, question.target_fieldname) == SALES_TEAM_TARGET:
@@ -200,21 +224,39 @@ def resolve_dynamic_options(question, answers: dict) -> list[dict]:
 
 
 def question_payload(question, answers: dict, *, user: str | None = None) -> dict:
-	"""Everything the frontend needs to render one question."""
+	"""Everything the frontend needs to render one question.
+
+	Includes the target field's meta and each answer's ``mapped_value`` so the
+	Review step can show the *resolved ERPNext values* (and offer the right
+	override control) without asking the server again. Display-only: the server
+	re-resolves and re-validates everything at submit time.
+	"""
 	user_roles = set(frappe.get_roles(user or frappe.session.user))
+	target_label, target_fieldtype, target_field_options = _target_field_meta(question)
 	payload = {
 		"question_key": question.question_key,
 		"label": question.label,
 		"target_doctype": question.target_doctype,
 		"target_fieldname": question.target_fieldname,
+		"target_label": target_label,
+		"target_fieldtype": target_fieldtype,
+		"target_field_options": target_field_options,
 		"question_type": question.question_type,
 		"depends_on_question": question.depends_on_question,
 		"depends_on_option": question.depends_on_option,
+		"depends_on_operator": question.depends_on_operator or "Is",
+		"is_mandatory": bool(question.is_mandatory),
+		"fallback_value": question.fallback_value or None,
 		"can_override": bool(user_roles & set(question.get_override_roles())),
 	}
 	if question.question_type == "Fixed":
 		payload["options"] = [
-			{"label": o.option_label, "value": o.option_value, "is_default": bool(o.is_default)}
+			{
+				"label": o.option_label,
+				"value": o.option_value,
+				"mapped_value": o.mapped_value or None,
+				"is_default": bool(o.is_default),
+			}
 			for o in question.options
 		]
 		payload["default"] = default_answer(question)
@@ -224,6 +266,31 @@ def question_payload(question, answers: dict, *, user: str | None = None) -> dic
 	return payload
 
 
+def _target_field_meta(question) -> tuple[str, str, str | None]:
+	"""(label, fieldtype, options) of the target field, for the Review step's
+	value display and override control. The Sales Team special target renders as
+	a Sales Person link."""
+	if (question.target_doctype, question.target_fieldname) == SALES_TEAM_TARGET:
+		return _("Sales Person"), "Link", "Sales Person"
+	field = frappe.get_meta(question.target_doctype).get_field(question.target_fieldname)
+	if not field:
+		return question.target_fieldname.replace("_", " ").title(), "Data", None
+	label = _(field.label) if field.label else question.target_fieldname
+	return label, field.fieldtype, field.options or None
+
+
+def all_questions_payload(scope: str, answers: dict | None = None, *, user: str | None = None) -> list[dict]:
+	"""Every enabled question for a step, regardless of current visibility — what
+	`get_wizard_context` sends at page load. The client (``lib/questions.js``)
+	does its own branching visibility from this full list as the user answers, so
+	a follow-up question only reachable through a later answer is still present
+	for it to reveal; ``resolve()``/``scope_payload`` remain the visibility-filtered
+	view used server-side at submit time."""
+	return [question_payload(q, answers or {}, user=user) for q in get_questions(scope)]
+
+
 def scope_payload(scope: str, answers: dict, *, user: str | None = None) -> list[dict]:
-	"""Visible questions for a step, each with its live options — what `get_wizard_context` sends."""
+	"""Visible questions for a step, each with its live options — used to re-resolve
+	Dynamic options as answers change (``refresh_customer_questions``) and at submit
+	time; NOT what the initial page render should use (see ``all_questions_payload``)."""
 	return [question_payload(q, answers, user=user) for q in visible_questions(scope, answers)]

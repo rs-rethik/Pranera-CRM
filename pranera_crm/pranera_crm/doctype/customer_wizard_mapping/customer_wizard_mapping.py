@@ -27,9 +27,11 @@ class CustomerWizardMapping(Document):
 		)
 
 		depends_on_option: DF.Data | None
+		depends_on_operator: DF.Literal["Is", "Is not"]
 		depends_on_question: DF.Link | None
 		enabled: DF.Check
 		fallback_value: DF.Data | None
+		is_mandatory: DF.Check
 		label: DF.Data
 		options: DF.Table[CustomerWizardMappingOption]
 		override_roles: DF.SmallText | None
@@ -108,11 +110,14 @@ class CustomerWizardMapping(Document):
 	def validate_branching(self):
 		if not self.depends_on_question:
 			self.depends_on_option = None
+			self.depends_on_operator = None
 			return
 		if self.depends_on_question == self.name:
 			frappe.throw(_("A question can't depend on itself."))
 		if not self.depends_on_option:
 			frappe.throw(_("Only When Answer Is is required when Only After Question is set."))
+		if self.depends_on_operator not in (None, "Is", "Is not"):
+			frappe.throw(_("Match must be \"Is\" or \"Is not\"."))
 
 		parent = frappe.get_cached_doc("Customer Wizard Mapping", self.depends_on_question)
 		if parent.scope != self.scope:
