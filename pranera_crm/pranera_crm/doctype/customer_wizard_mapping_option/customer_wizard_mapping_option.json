@@ -1,0 +1,59 @@
+{
+ "actions": [],
+ "creation": "2026-09-22 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "option_label",
+  "option_value",
+  "mapped_value",
+  "is_default"
+ ],
+ "fields": [
+  {
+   "description": "Shown to the user answering the question, e.g. \"Yes\", \"Wholesale\", \"Tamil Nadu\".",
+   "fieldname": "option_label",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Answer",
+   "reqd": 1
+  },
+  {
+   "description": "Internal key used to match this answer against a follow-up question's \"Only when answer is\".",
+   "fieldname": "option_value",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Answer Key",
+   "reqd": 1
+  },
+  {
+   "description": "Value written to the target field when this answer is chosen. Leave empty for an answer that only triggers a follow-up question and should not change the field itself (e.g. an \"SEZ: No\" that should leave whatever the previous question set).",
+   "fieldname": "mapped_value",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Assigned Value"
+  },
+  {
+   "default": "0",
+   "description": "Pre-selects this answer. If it is the only enabled answer, the question is answered automatically and not shown.",
+   "fieldname": "is_default",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Default"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-09-22 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Pranera CRM",
+ "name": "Customer Wizard Mapping Option",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

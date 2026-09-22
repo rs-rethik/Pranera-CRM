@@ -1,0 +1,242 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-09-22 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "question_key",
+  "label",
+  "scope",
+  "enabled",
+  "column_break_basic",
+  "target_doctype",
+  "target_fieldname",
+  "question_type",
+  "section_break_options",
+  "options",
+  "section_break_dynamic",
+  "source_doctype",
+  "source_label_field",
+  "column_break_dynamic",
+  "source_filters",
+  "section_break_branching",
+  "depends_on_question",
+  "depends_on_option",
+  "column_break_branching",
+  "fallback_value",
+  "sequence",
+  "section_break_override",
+  "override_roles"
+ ],
+ "fields": [
+  {
+   "description": "Stable internal code for this question, e.g. \"gst_registered\". Referenced by follow-up questions' \"Only when answer is\" and never shown to the user.",
+   "fieldname": "question_key",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Question Key",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "description": "The plain-language question shown to the user, e.g. \"Does the customer have a GSTIN?\"",
+   "fieldname": "label",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Question",
+   "reqd": 1
+  },
+  {
+   "description": "Which step of the Deal Wizard this question appears in.",
+   "fieldname": "scope",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Applies To",
+   "options": "Organization\nContact",
+   "reqd": 1
+  },
+  {
+   "default": "1",
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Enabled"
+  },
+  {
+   "fieldname": "column_break_basic",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Which record this question's answer is written onto.",
+   "fieldname": "target_doctype",
+   "fieldtype": "Select",
+   "label": "Target Doctype",
+   "options": "Customer\nAddress\nContact",
+   "reqd": 1
+  },
+  {
+   "description": "Fieldname on the target doctype, e.g. \"gst_category\". Checked against the doctype's actual fields on save. Use \"sales_team\" (on Customer) for a Sales Person question — it is special-cased to append a Sales Team row instead of setting a plain field.",
+   "fieldname": "target_fieldname",
+   "fieldtype": "Data",
+   "label": "Target Fieldname",
+   "reqd": 1
+  },
+  {
+   "default": "Fixed",
+   "description": "Fixed: a curated list of answers you define below (Options). Dynamic: the answers are live records from another doctype (e.g. enabled Sales Persons) — still a friendly picked list, never a raw search box.",
+   "fieldname": "question_type",
+   "fieldtype": "Select",
+   "label": "Question Type",
+   "options": "Fixed\nDynamic",
+   "reqd": 1
+  },
+  {
+   "collapsible": 1,
+   "depends_on": "eval:doc.question_type == \"Fixed\"",
+   "fieldname": "section_break_options",
+   "fieldtype": "Section Break",
+   "label": "Answers"
+  },
+  {
+   "depends_on": "eval:doc.question_type == \"Fixed\"",
+   "fieldname": "options",
+   "fieldtype": "Table",
+   "label": "Answers",
+   "options": "Customer Wizard Mapping Option"
+  },
+  {
+   "collapsible": 1,
+   "depends_on": "eval:doc.question_type == \"Dynamic\"",
+   "fieldname": "section_break_dynamic",
+   "fieldtype": "Section Break",
+   "label": "Live Answer Source"
+  },
+  {
+   "depends_on": "eval:doc.question_type == \"Dynamic\"",
+   "description": "Doctype the live options are fetched from, e.g. \"Sales Person\".",
+   "fieldname": "source_doctype",
+   "fieldtype": "Link",
+   "label": "Source Doctype",
+   "options": "DocType"
+  },
+  {
+   "default": "name",
+   "depends_on": "eval:doc.question_type == \"Dynamic\"",
+   "description": "Fieldname shown to the user as the answer's label, e.g. \"sales_person_name\". Defaults to the record's name.",
+   "fieldname": "source_label_field",
+   "fieldtype": "Data",
+   "label": "Source Label Field"
+  },
+  {
+   "fieldname": "column_break_dynamic",
+   "fieldtype": "Column Break"
+  },
+  {
+   "depends_on": "eval:doc.question_type == \"Dynamic\"",
+   "description": "Optional Frappe filters as JSON, e.g. {\"enabled\": 1, \"is_group\": 0}. Wrap a previous answer in {{ }} to filter by it, e.g. {\"territory\": \"{{ answers.territory }}\"}.",
+   "fieldname": "source_filters",
+   "fieldtype": "Code",
+   "label": "Filters (JSON)",
+   "options": "JSON"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "section_break_branching",
+   "fieldtype": "Section Break",
+   "label": "Branching & Fallback"
+  },
+  {
+   "description": "Only ask this question after another one has been answered a particular way, e.g. a \"Regular or Composition?\" follow-up that only appears when \"Does the customer have a GSTIN?\" was answered \"Yes\".",
+   "fieldname": "depends_on_question",
+   "fieldtype": "Link",
+   "label": "Only After Question",
+   "options": "Customer Wizard Mapping"
+  },
+  {
+   "depends_on": "eval:doc.depends_on_question",
+   "description": "The Answer Key (not label) of the answer above that must have been chosen.",
+   "fieldname": "depends_on_option",
+   "fieldtype": "Data",
+   "label": "Only When Answer Is"
+  },
+  {
+   "fieldname": "column_break_branching",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Used, and flagged on the Review step, when the user's path through the questions leaves this field unset.",
+   "fieldname": "fallback_value",
+   "fieldtype": "Data",
+   "label": "Fallback Value"
+  },
+  {
+   "default": "0",
+   "description": "Lower runs first. Later questions targeting the same field overwrite earlier ones (only when their chosen answer has an Assigned Value) — this is how two follow-up questions about the same field combine.",
+   "fieldname": "sequence",
+   "fieldtype": "Int",
+   "label": "Order"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "section_break_override",
+   "fieldtype": "Section Break",
+   "label": "Review Step Override"
+  },
+  {
+   "description": "Roles allowed to override this question's assigned value on the Review step before submitting. One role per line. Leave empty to never allow overriding.",
+   "fieldname": "override_roles",
+   "fieldtype": "Small Text",
+   "label": "Override Allowed For Roles"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-09-22 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Pranera CRM",
+ "name": "Customer Wizard Mapping",
+ "naming_rule": "By fieldname",
+ "autoname": "field:question_key",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Sales Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Sales User"
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "sequence",
+ "sort_order": "ASC",
+ "states": [],
+ "track_changes": 1
+}
