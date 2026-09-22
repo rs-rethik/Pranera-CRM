@@ -1,0 +1,195 @@
+[
+ {
+  "doctype": "Customer Wizard Mapping",
+  "name": "customer_type",
+  "question_key": "customer_type",
+  "label": "Is this customer a registered business or an individual?",
+  "scope": "Organization",
+  "enabled": 1,
+  "target_doctype": "Customer",
+  "target_fieldname": "customer_type",
+  "question_type": "Fixed",
+  "sequence": 10,
+  "options": [
+   {"option_label": "Registered Business", "option_value": "company", "mapped_value": "Company"},
+   {"option_label": "Individual", "option_value": "individual", "mapped_value": "Individual"}
+  ]
+ },
+ {
+  "doctype": "Customer Wizard Mapping",
+  "name": "customer_group",
+  "question_key": "customer_group",
+  "label": "What kind of customer is this?",
+  "scope": "Organization",
+  "enabled": 1,
+  "target_doctype": "Customer",
+  "target_fieldname": "customer_group",
+  "question_type": "Fixed",
+  "sequence": 20,
+  "override_roles": "System Manager\nSales Manager",
+  "options": [
+   {"option_label": "Business (Wholesale / Retail / Distributor)", "option_value": "business", "mapped_value": "Commercial"},
+   {"option_label": "Government", "option_value": "government", "mapped_value": "Government"},
+   {"option_label": "Non-Profit / NGO", "option_value": "non_profit", "mapped_value": "Non Profit"},
+   {"option_label": "Individual", "option_value": "individual", "mapped_value": "Individual"}
+  ]
+ },
+ {
+  "doctype": "Customer Wizard Mapping",
+  "name": "territory",
+  "question_key": "territory",
+  "label": "Where is the customer located?",
+  "scope": "Organization",
+  "enabled": 1,
+  "target_doctype": "Customer",
+  "target_fieldname": "territory",
+  "question_type": "Fixed",
+  "sequence": 30,
+  "override_roles": "System Manager\nSales Manager",
+  "options": [
+   {"option_label": "Tamil Nadu", "option_value": "tamil_nadu", "mapped_value": "India"},
+   {"option_label": "Other Indian State", "option_value": "other_india", "mapped_value": "India"},
+   {"option_label": "Outside India", "option_value": "outside_india", "mapped_value": "Rest Of The World"}
+  ]
+ },
+ {
+  "doctype": "Customer Wizard Mapping",
+  "name": "default_currency",
+  "question_key": "default_currency",
+  "label": "Which currency will you invoice this customer in?",
+  "scope": "Organization",
+  "enabled": 1,
+  "target_doctype": "Customer",
+  "target_fieldname": "default_currency",
+  "question_type": "Fixed",
+  "fallback_value": "INR",
+  "sequence": 40,
+  "options": [
+   {"option_label": "India (INR)", "option_value": "inr", "mapped_value": "INR", "is_default": 1},
+   {"option_label": "International (USD)", "option_value": "usd", "mapped_value": "USD"}
+  ]
+ },
+ {
+  "doctype": "Customer Wizard Mapping",
+  "name": "payment_terms",
+  "question_key": "payment_terms",
+  "label": "What payment arrangement is agreed with this customer?",
+  "scope": "Organization",
+  "enabled": 1,
+  "target_doctype": "Customer",
+  "target_fieldname": "payment_terms",
+  "question_type": "Fixed",
+  "sequence": 50,
+  "options": [
+   {"option_label": "Advance", "option_value": "advance", "mapped_value": "100% Advance", "is_default": 1}
+  ]
+ },
+ {
+  "doctype": "Customer Wizard Mapping",
+  "name": "address_type",
+  "question_key": "address_type",
+  "label": "What is this address used for?",
+  "scope": "Organization",
+  "enabled": 1,
+  "target_doctype": "Address",
+  "target_fieldname": "address_type",
+  "question_type": "Fixed",
+  "fallback_value": "Billing",
+  "sequence": 60,
+  "options": [
+   {"option_label": "Billing", "option_value": "billing", "mapped_value": "Billing", "is_default": 1},
+   {"option_label": "Delivery (Shipping)", "option_value": "shipping", "mapped_value": "Shipping"},
+   {"option_label": "Office", "option_value": "office", "mapped_value": "Office"}
+  ]
+ },
+ {
+  "doctype": "Customer Wizard Mapping",
+  "name": "gst_registered",
+  "question_key": "gst_registered",
+  "label": "Does the customer have a GSTIN?",
+  "scope": "Organization",
+  "enabled": 1,
+  "target_doctype": "Address",
+  "target_fieldname": "gst_category",
+  "question_type": "Fixed",
+  "fallback_value": "Unregistered",
+  "sequence": 70,
+  "options": [
+   {"option_label": "Yes", "option_value": "yes"},
+   {"option_label": "No", "option_value": "no", "mapped_value": "Unregistered"},
+   {"option_label": "Outside India", "option_value": "outside", "mapped_value": "Overseas"}
+  ]
+ },
+ {
+  "doctype": "Customer Wizard Mapping",
+  "name": "gst_registration_type",
+  "question_key": "gst_registration_type",
+  "label": "Regular or Composition?",
+  "scope": "Organization",
+  "enabled": 1,
+  "target_doctype": "Address",
+  "target_fieldname": "gst_category",
+  "question_type": "Fixed",
+  "depends_on_question": "gst_registered",
+  "depends_on_option": "yes",
+  "sequence": 71,
+  "override_roles": "System Manager\nSales Manager",
+  "options": [
+   {"option_label": "Regular", "option_value": "regular", "mapped_value": "Registered Regular", "is_default": 1},
+   {"option_label": "Composition", "option_value": "composition", "mapped_value": "Registered Composition"}
+  ]
+ },
+ {
+  "doctype": "Customer Wizard Mapping",
+  "name": "gst_sez",
+  "question_key": "gst_sez",
+  "label": "Is it an SEZ unit?",
+  "scope": "Organization",
+  "enabled": 1,
+  "target_doctype": "Address",
+  "target_fieldname": "gst_category",
+  "question_type": "Fixed",
+  "depends_on_question": "gst_registered",
+  "depends_on_option": "yes",
+  "sequence": 72,
+  "override_roles": "System Manager\nSales Manager",
+  "options": [
+   {"option_label": "Yes", "option_value": "yes", "mapped_value": "SEZ"},
+   {"option_label": "No", "option_value": "no", "is_default": 1}
+  ]
+ },
+ {
+  "doctype": "Customer Wizard Mapping",
+  "name": "sales_person",
+  "question_key": "sales_person",
+  "label": "Who handles this customer?",
+  "scope": "Organization",
+  "enabled": 1,
+  "target_doctype": "Customer",
+  "target_fieldname": "sales_team",
+  "question_type": "Dynamic",
+  "source_doctype": "Sales Person",
+  "source_label_field": "sales_person_name",
+  "source_filters": "{\"enabled\": 1, \"is_group\": 0}",
+  "sequence": 80
+ },
+ {
+  "doctype": "Customer Wizard Mapping",
+  "name": "designation",
+  "question_key": "designation",
+  "label": "What is this person's role?",
+  "scope": "Contact",
+  "enabled": 1,
+  "target_doctype": "Contact",
+  "target_fieldname": "designation",
+  "question_type": "Fixed",
+  "sequence": 10,
+  "options": [
+   {"option_label": "Owner", "option_value": "owner", "mapped_value": "Owner"},
+   {"option_label": "Purchase", "option_value": "purchase", "mapped_value": "Purchase"},
+   {"option_label": "Accounts", "option_value": "accounts", "mapped_value": "Accounts"},
+   {"option_label": "Merchandiser", "option_value": "merchandiser", "mapped_value": "Merchandiser"},
+   {"option_label": "Other", "option_value": "other", "mapped_value": "Other"}
+  ]
+ }
+]

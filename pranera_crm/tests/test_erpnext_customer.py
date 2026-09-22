@@ -5,7 +5,7 @@ from pranera_crm import customer_wizard as cw
 from pranera_crm import erpnext_customer as ec
 from pranera_crm.api import convert
 from pranera_crm.tests.test_api import _hash, deal_status, make_lead, make_org, make_user
-from pranera_crm.tests.test_customer_wizard import make_question
+from pranera_crm.tests.test_customer_wizard import isolate_from_seed_questions, make_question
 
 
 def set_erpnext_bridge(enabled):
@@ -37,6 +37,7 @@ class TestConvertWithCustomerSetup(CRMTestCase):
 	def setUp(self):
 		frappe.set_user("Administrator")
 		set_erpnext_bridge(True)
+		isolate_from_seed_questions()
 		self.deal = {"status": deal_status()}
 
 	def tearDown(self):
@@ -163,6 +164,7 @@ class TestErpnextCustomerCreate(CRMTestCase):
 
 	def setUp(self):
 		frappe.set_user("Administrator")
+		isolate_from_seed_questions()
 
 	def tearDown(self):
 		frappe.set_user("Administrator")

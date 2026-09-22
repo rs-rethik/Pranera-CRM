@@ -21,6 +21,18 @@ def _make_user(roles):
 	).insert(ignore_permissions=True).name
 
 
+def isolate_from_seed_questions():
+	"""The app ships real Customer Wizard Mapping rows (fixtures/customer_wizard_mapping.json).
+	Tests that call the resolution engine need only their own ad-hoc questions visible,
+	so disable the seeded ones for the duration of the test (rolled back in tearDown
+	like everything else). Uses the ORM helper, not raw SQL, so each row's document
+	cache is invalidated too."""
+	names = frappe.get_all("Customer Wizard Mapping", filters={"enabled": 1}, pluck="name")
+	for name in names:
+		frappe.db.set_value("Customer Wizard Mapping", name, "enabled", 0)
+	frappe.clear_cache(doctype="Customer Wizard Mapping")
+
+
 def make_question(**kwargs):
 	data = {
 		"doctype": "Customer Wizard Mapping",
@@ -39,6 +51,7 @@ def make_question(**kwargs):
 class TestCustomerWizardResolution(CRMTestCase):
 	def setUp(self):
 		frappe.set_user("Administrator")
+		isolate_from_seed_questions()
 		self._created = []
 
 	def tearDown(self):

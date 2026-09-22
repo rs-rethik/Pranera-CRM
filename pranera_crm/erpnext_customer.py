@@ -118,6 +118,7 @@ def create(
 	_validate_resolved_links(org_result["fields"])
 	_validate_resolved_links(contact_result["fields"])
 	_validate_gst(org_result["fields"].get(CUSTOMER, {}), org_result["fields"].get(ADDRESS, {}), address)
+	_mirror_gst_category_to_customer(org_result["fields"])
 
 	customer_name = (deal_doc.organization or "").strip() or _primary_contact_full_name(deal_doc)
 	if not customer_name:
@@ -177,6 +178,17 @@ def _validate_resolved_links(fields_by_doctype: dict):
 							_(field.options), value, doctype, fieldname
 						)
 					)
+
+
+def _mirror_gst_category_to_customer(fields_by_doctype: dict):
+	"""GST Category questions naturally target the Address (a business can be
+	registered differently per location); Customer.gst_category is a required,
+	denormalised copy, so mirror the Address's resolved value onto it unless a
+	question targets Customer.gst_category directly."""
+	address_gst = fields_by_doctype.get(ADDRESS, {}).get("gst_category")
+	if not address_gst:
+		return
+	fields_by_doctype.setdefault(CUSTOMER, {}).setdefault("gst_category", address_gst)
 
 
 def _validate_gst(customer_fields: dict, address_fields: dict, address_input: dict):

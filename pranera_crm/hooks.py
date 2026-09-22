@@ -273,6 +273,9 @@ fixtures = [
 	{"dt": "CRM Form Script", "filters": [["name", "=", "Pranera Convert Wizard"]]},
 	# "Enable Convert to Deal Wizard" switch on CRM Settings
 	{"dt": "Custom Field", "filters": [["name", "=", "FCRM Settings-enable_convert_to_deal_wizard"]]},
+	# Starting set of question -> answer -> value mappings for the ERPNext Customer
+	# step; edit, disable or add to these freely in Customer Wizard Mapping.
+	{"dt": "Customer Wizard Mapping"},
 ]
 
 # Store the switch's default (enabled) once; never overwrites a saved value
