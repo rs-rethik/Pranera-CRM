@@ -4,6 +4,11 @@ from crm.tests import CRMTestCase
 from pranera_crm.api import LeadAlreadyConverted, convert, get_wizard_context
 
 
+def convert_deal(*args, **kwargs):
+	"""convert() returns {deal, customer, ...}; most tests only need the deal name."""
+	return convert(*args, **kwargs)["deal"]
+
+
 def _hash():
 	return frappe.generate_hash(length=8)
 
@@ -96,14 +101,14 @@ class TestConvert(CRMTestCase):
 		frappe.set_user(user)
 		# CRM restricts leads by owner / assignment / hierarchy
 		lead = make_lead(lead_owner=user)
-		deal = convert(lead.name, deal=self.deal)
+		deal = convert_deal(lead.name, deal=self.deal)
 		self.assertEqual(frappe.db.get_value("CRM Deal", deal, "lead"), lead.name)
 
 	# -- guards ----------------------------------------------------------- #
 
 	def test_already_converted(self):
 		lead = make_lead()
-		first = convert(lead.name, deal=self.deal)
+		first = convert_deal(lead.name, deal=self.deal)
 
 		with self.assertRaises(LeadAlreadyConverted) as ctx:
 			convert(lead.name, deal=self.deal)
@@ -146,7 +151,7 @@ class TestConvert(CRMTestCase):
 		lead = make_lead()
 		other = make_lead()
 		org = make_org()
-		deal = convert(
+		deal = convert_deal(
 			lead.name,
 			deal={
 				**self.deal,
@@ -163,7 +168,7 @@ class TestConvert(CRMTestCase):
 
 	def test_deal_payload_as_json_string(self):
 		lead = make_lead()
-		deal = convert(lead.name, deal=frappe.as_json(self.deal))
+		deal = convert_deal(lead.name, deal=frappe.as_json(self.deal))
 		self.assertEqual(frappe.db.get_value("CRM Deal", deal, "status"), self.deal["status"])
 
 	# -- happy paths ------------------------------------------------------ #
@@ -174,7 +179,7 @@ class TestConvert(CRMTestCase):
 		renamed = f"Renamed Org {_hash()}"
 		new_email = f"renamed-{_hash()}@example.com"
 
-		deal = convert(
+		deal = convert_deal(
 			lead.name,
 			deal=self.deal,
 			lead_updates={
@@ -204,7 +209,7 @@ class TestConvert(CRMTestCase):
 		orgs = frappe.db.count("CRM Organization")
 		contacts = frappe.db.count("Contact")
 
-		deal = convert(lead.name, deal=self.deal)
+		deal = convert_deal(lead.name, deal=self.deal)
 
 		self.assertEqual(frappe.db.count("CRM Organization"), orgs + 1)
 		self.assertEqual(frappe.db.count("Contact"), contacts + 1)
@@ -218,7 +223,7 @@ class TestConvert(CRMTestCase):
 		orgs = frappe.db.count("CRM Organization")
 		contacts = frappe.db.count("Contact")
 
-		deal = convert(
+		deal = convert_deal(
 			lead.name,
 			deal=self.deal,
 			existing_organization=org.name,
@@ -264,7 +269,7 @@ class TestWizardContext(CRMTestCase):
 	def test_context_reports_converted(self):
 		frappe.set_user("Administrator")
 		lead = make_lead()
-		deal = convert(lead.name, deal={"status": deal_status()})
+		deal = convert_deal(lead.name, deal={"status": deal_status()})
 		ctx = get_wizard_context(lead.name)
 		self.assertTrue(ctx["converted"])
 		self.assertEqual(ctx["deal"], deal)
@@ -350,7 +355,7 @@ class TestWizardSwitch(CRMTestCase):
 		lead = make_lead()
 		self._set(0)
 		self._set(1)
-		self.assertTrue(convert(lead.name, deal={"status": deal_status()}))
+		self.assertTrue(convert_deal(lead.name, deal={"status": deal_status()}))
 
 	def test_default_is_written_once_and_never_overwrites_an_admin_choice(self):
 		from pranera_crm.settings import DEFAULT_APPLIED, ensure_default, is_wizard_enabled

@@ -48,6 +48,22 @@ def ensure_default():
 	frappe.db.set_default(DEFAULT_APPLIED, "1")
 
 
+ERPNEXT_SETTINGS = "ERPNext CRM Settings"
+
+
+def is_erpnext_customer_enabled() -> bool:
+	"""Is CRM's own ERPNext bridge ("ERPNext CRM Settings" > Enabled) on?
+
+	Gates the whole "set up this customer in ERPNext" section of the wizard: when
+	off, the wizard behaves exactly as it did before this feature existed. Unlike
+	``is_wizard_enabled`` there is no separate switch of our own to invent — this
+	reuses the toggle CRM itself already ships and the site owner already set.
+	"""
+	if not frappe.db.exists("DocType", ERPNEXT_SETTINGS):
+		return False
+	return bool(cint(frappe.db.get_single_value(ERPNEXT_SETTINGS, "enabled")))
+
+
 def get_site_properties() -> dict:
 	"""What CRM itself follows: language, time zone, System Settings formats, currency, branding."""
 	from frappe.utils import get_system_timezone
