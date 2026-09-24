@@ -4,18 +4,43 @@
 
     <Switch v-model="useExisting" :label="__('Choose Existing')" />
 
-    <Link
-      v-if="useExisting"
-      v-model="contact.existing"
-      doctype="Contact"
-      :label="__('Contact')"
-      :placeholder="__('Search contact')"
-      :description="matchNote"
-      required
-      :error="showErrors ? errors.existing : ''"
-    />
+    <template v-if="useExisting">
+      <CandidateList
+        v-if="candidates.contacts?.length"
+        :candidates="candidates.contacts"
+        :selected="contact.existing"
+        @select="(name) => (contact.existing = name)"
+      >
+        <template #default="{ candidate }">
+          <span class="min-w-0">
+            <span class="font-medium text-ink-gray-9">{{ contactLabel(candidate) }}</span>
+            <span class="text-ink-gray-5"> — {{ __("Matches the lead's {0}", [matchReason(candidate.reason)]) }}</span>
+          </span>
+        </template>
+      </CandidateList>
+
+      <Link
+        v-model="contact.existing"
+        doctype="Contact"
+        :label="candidates.contacts?.length ? __('Or search for someone else') : __('Contact')"
+        :placeholder="__('Search contact')"
+        :description="matchNote"
+        required
+        :error="showErrors ? errors.existing : ''"
+      />
+    </template>
 
     <template v-else>
+      <div v-if="bridgeIndependentContactQuestions.length" class="grid grid-cols-2 gap-x-4 gap-y-4">
+        <QuestionField
+          v-for="q in bridgeIndependentContactQuestions"
+          :key="q.question_key"
+          v-model="customer.contactAnswers[q.question_key]"
+          :question="q"
+          :error="showErrors ? errors['cq_' + q.question_key] : ''"
+        />
+      </div>
+
       <div class="grid grid-cols-2 gap-x-4 gap-y-4">
         <FieldControl
           v-for="field in fields"
@@ -32,11 +57,11 @@
       <p v-else class="text-sm text-ink-gray-5">{{ __('A new contact is created from these details.') }}</p>
     </template>
 
-    <template v-if="ctx.customer?.enabled && customer.enabled && contactQuestions.length">
+    <template v-if="ctx.customer?.enabled && customer.enabled && bridgeContactQuestions.length">
       <div class="h-px bg-outline-gray-2" />
       <div class="grid grid-cols-2 gap-x-4 gap-y-4">
         <QuestionField
-          v-for="q in contactQuestions"
+          v-for="q in bridgeContactQuestions"
           :key="q.question_key"
           v-model="customer.contactAnswers[q.question_key]"
           :question="q"
@@ -51,8 +76,10 @@
 import { computed, inject, toRef } from 'vue'
 import { Switch } from 'frappe-ui'
 import { Link } from 'frappe-ui/frappe'
+import CandidateList from '@/components/CandidateList.vue'
 import FieldControl from '@/components/FieldControl.vue'
 import QuestionField from '@/components/QuestionField.vue'
+import { useDynamicOptionsRefresh } from '@/composables/useDynamicOptionsRefresh'
 import { matchReason } from '@/lib/layout'
 import { visibleQuestions } from '@/lib/questions'
 import { __ } from '@/translation'
@@ -65,8 +92,7 @@ const showErrors = toRef(w, 'showErrors')
 const contact = form.contact
 const customer = form.customer
 
-// display order: pairs share a row, these span the full width
-const ORDER = ['salutation', 'gender', 'first_name', 'last_name', 'email', 'phone', 'mobile_no', 'job_title']
+const ORDER = ['first_name', 'last_name', 'email', 'phone', 'mobile_no', 'job_title']
 const FULL_WIDTH = ['email', 'job_title']
 const fields = computed(() =>
   [...ctx.contact_fields].sort((a, b) => ORDER.indexOf(a.fieldname) - ORDER.indexOf(b.fieldname)),
@@ -87,5 +113,23 @@ const matchNote = computed(() => {
   return match ? __("Matches the lead's {0}", [matchReason(match.reason)]) : ''
 })
 
+function contactLabel(c) {
+  const name = [c.first_name, c.last_name].filter(Boolean).join(' ') || c.name
+  const extra = c.email_id || c.mobile_no
+  return extra ? `${name} (${extra})` : name
+}
+
 const contactQuestions = computed(() => visibleQuestions(ctx.customer?.contact_questions, customer.contactAnswers))
+
+useDynamicOptionsRefresh(
+  'Contact',
+  computed(() => ctx.customer?.contact_questions),
+  customer.contactAnswers,
+  computed(() => !!ctx.customer?.enabled),
+)
+
+const bridgeIndependentContactQuestions = computed(() =>
+  contactQuestions.value.filter((q) => !q.requires_erpnext_bridge),
+)
+const bridgeContactQuestions = computed(() => contactQuestions.value.filter((q) => q.requires_erpnext_bridge))
 </script>

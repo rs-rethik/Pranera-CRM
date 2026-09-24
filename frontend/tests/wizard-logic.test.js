@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applyDraft, createForm, toPayload } from '@/lib/form'
+import { applyDraft, createForm, customerPayload, toPayload } from '@/lib/form'
 import { flattenLayout, isClientRequired, selectOptions } from '@/lib/layout'
 import { STEPS, firstInvalidStep, resolveStep, validateStep } from '@/lib/validation'
 
@@ -47,9 +47,9 @@ describe('layout helpers', () => {
   it('only insists on values it can actually check', () => {
     const byName = Object.fromEntries(flattenLayout(dealLayout).map((f) => [f.fieldname, f]))
     expect(isClientRequired(byName.status)).toBe(true)
-    expect(isClientRequired(byName.notes)).toBe(false) // conditional: server decides
-    expect(isClientRequired(byName.proof)).toBe(false) // can't be rendered here
-    expect(isClientRequired(byName.active)).toBe(false) // a Check is always "filled"
+    expect(isClientRequired(byName.notes)).toBe(false)
+    expect(isClientRequired(byName.proof)).toBe(false)
+    expect(isClientRequired(byName.active)).toBe(false)
   })
 
   it('adds an empty row to optional selects only', () => {
@@ -84,7 +84,7 @@ describe('form state', () => {
     expect(form.organization.existing).toBe('Globex')
     expect(form.organization.values.organization).toBe('Edited')
     expect('bogus' in form.organization.values).toBe(false)
-    expect(form.contact.mode).toBe('new') // invalid mode ignored
+    expect(form.contact.mode).toBe('new')
     expect(form.deal.status).toBe('Won')
   })
 
@@ -98,13 +98,36 @@ describe('form state', () => {
     expect(payload.existing_organization).toBe('')
     expect(payload.lead_updates.organization).toBe('Acme Ltd')
     expect(payload.lead_updates.first_name).toBe('Ada')
-    expect(payload.deal).toEqual({ status: 'Qualification' }) // empty values dropped
+    expect(payload.deal).toEqual({ status: 'Qualification' })
 
     form.organization.mode = 'existing'
     form.organization.existing = 'Globex'
     const second = toPayload(form, 'CRM-LEAD-1')
     expect(second.existing_organization).toBe('Globex')
     expect('organization' in second.lead_updates).toBe(false)
+  })
+
+  it('sends address values for "new" and customer_existing_address for "existing"', () => {
+    const ctxWithCustomer = {
+      ...ctx,
+      customer: {
+        enabled: true,
+        organization_questions: [],
+        contact_questions: [],
+        address_fields: [{ fieldname: 'address_line1' }, { fieldname: 'city' }],
+      },
+    }
+    const form = createForm(ctxWithCustomer)
+    form.customer.address.values.address_line1 = '1 MG Road'
+    let payload = customerPayload(form)
+    expect(payload.customer_address).toEqual({ address_line1: '1 MG Road' })
+    expect(payload.customer_existing_address).toBe('')
+
+    form.customer.address.mode = 'existing'
+    form.customer.address.existing = 'Some Address-Billing'
+    payload = customerPayload(form)
+    expect(payload.customer_address).toEqual({})
+    expect(payload.customer_existing_address).toBe('Some Address-Billing')
   })
 })
 
@@ -131,9 +154,70 @@ describe('per-step validation and the step guard', () => {
     expect(validateStep(2, form, ctx)).toEqual({})
   })
 
+  it('requires State once an Indian address is started', () => {
+    const ctxWithCustomer = {
+      ...ctx,
+      customer: {
+        enabled: true,
+        organization_questions: [],
+        contact_questions: [],
+        address_fields: [
+          { fieldname: 'address_line1' },
+          { fieldname: 'city' },
+          { fieldname: 'country' },
+          { fieldname: 'state' },
+        ],
+      },
+    }
+    const form = createForm(ctxWithCustomer)
+    form.customer.address.values.address_line1 = '1 MG Road'
+    form.customer.address.values.city = 'Chennai'
+    form.customer.address.values.country = 'India'
+    expect(validateStep(0, form, ctxWithCustomer)).toHaveProperty('customer_state')
+    form.customer.address.values.state = 'Tamil Nadu'
+    expect(validateStep(0, form, ctxWithCustomer)).toEqual({})
+
+    form.customer.address.values.country = 'United States'
+    form.customer.address.values.state = ''
+    expect(validateStep(0, form, ctxWithCustomer)).toEqual({})
+  })
+
+  it('requires a GSTIN once "Does the customer have a GST Number?" is Yes', () => {
+    const ctxWithCustomer = {
+      ...ctx,
+      customer: { enabled: true, organization_questions: [], contact_questions: [], address_fields: [] },
+    }
+    const form = createForm(ctxWithCustomer)
+    form.customer.answers.gst_registered = 'yes'
+    expect(validateStep(0, form, ctxWithCustomer)).toHaveProperty('customer_gstin')
+    form.customer.address.values.gstin = '27AAPFU0939F1ZV'
+    expect(validateStep(0, form, ctxWithCustomer)).toEqual({})
+
+    form.customer.address.values.gstin = ''
+    form.customer.answers.gst_registered = 'no'
+    expect(validateStep(0, form, ctxWithCustomer)).toEqual({})
+
+    form.customer.answers.gst_registered = 'yes'
+    form.customer.address.mode = 'existing'
+    form.customer.address.existing = 'Some Address-Billing'
+    expect(validateStep(0, form, ctxWithCustomer)).toEqual({})
+  })
+
+  it('requires picking one once "Choose Existing" is on for the address', () => {
+    const ctxWithCustomer = {
+      ...ctx,
+      customer: { enabled: true, organization_questions: [], contact_questions: [], address_fields: [] },
+    }
+    const form = createForm(ctxWithCustomer)
+    form.customer.address.mode = 'existing'
+    expect(validateStep(0, form, ctxWithCustomer)).toHaveProperty('customer_existing_address')
+    form.customer.address.existing = 'Some Address-Billing'
+    expect(validateStep(0, form, ctxWithCustomer)).toEqual({})
+  })
+
   it('never lets ?step= run ahead of the first invalid step', () => {
     const form = createForm(ctx)
-    expect(firstInvalidStep(form, ctx)).toBe(2) // deal status missing
+    expect(firstInvalidStep(form, ctx)).toBe(2)
     expect(resolveStep('4', form, ctx)).toBe(2)
     expect(resolveStep('1', form, ctx)).toBe(0)
     expect(resolveStep('garbage', form, ctx)).toBe(0)

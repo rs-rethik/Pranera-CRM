@@ -8,6 +8,7 @@
   "option_label",
   "option_value",
   "mapped_value",
+  "secondary_mapped_value",
   "is_default"
  ],
  "fields": [
@@ -33,6 +34,12 @@
    "fieldtype": "Data",
    "in_list_view": 1,
    "label": "Assigned Value"
+  },
+  {
+   "description": "Value written to the question's Secondary Target field (if configured) when this answer is chosen. Same rules as Assigned Value: leave empty to write nothing there for this answer.",
+   "fieldname": "secondary_mapped_value",
+   "fieldtype": "Data",
+   "label": "Secondary Assigned Value"
   },
   {
    "default": "0",

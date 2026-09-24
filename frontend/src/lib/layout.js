@@ -1,10 +1,5 @@
 import { __ } from '@/translation'
-// Helpers for the CRM Deal quick-entry ("Required Fields") layout returned by
-// pranera_crm.api.get_wizard_context. Nothing about Deal fields is hardcoded:
-// the wizard renders whatever CRM's layout contains.
 
-// Types the wizard cannot render. They are shown as a note and never block the
-// user client-side (the server still validates on submit).
 const UNSUPPORTED = new Set([
   'Attach',
   'Attach Image',
@@ -64,7 +59,6 @@ export function selectOptions(field) {
     .split('\n')
     .map((o) => o.trim())
     .filter(Boolean)
-  // optional selects need an explicit "nothing" row
   return field.reqd ? values : ['', ...values]
 }
 

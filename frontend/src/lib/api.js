@@ -21,8 +21,6 @@ export function crmUrlForPath(pathname = window.location.pathname) {
   return lead ? `/crm/leads/${encodeURIComponent(decodeURIComponent(lead))}` : '/crm'
 }
 
-// A promise that never settles: used after we've started navigating away so
-// callers don't flash an error while the page unloads.
 const navigating = () => new Promise(() => {})
 
 /**
@@ -64,7 +62,6 @@ export async function api(method, params = {}) {
     return result
   } catch (err) {
     if (err?.exc_type === 'WizardDisabled') {
-      // switched off in CRM Settings: CRM's own Convert to Deal flow applies
       window.location.assign(crmUrlForPath())
       return navigating()
     }

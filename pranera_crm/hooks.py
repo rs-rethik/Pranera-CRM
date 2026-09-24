@@ -268,16 +268,13 @@ website_route_rules = [
 # Serves /deal_wizard/sw.js with `Service-Worker-Allowed: /deal_wizard/`
 page_renderer = ["pranera_crm.sw.ServiceWorkerRenderer"]
 
-# Adds a "Convert (Wizard)" action to the CRM Lead page
 fixtures = [
 	{"dt": "CRM Form Script", "filters": [["name", "=", "Pranera Convert Wizard"]]},
 	# "Enable Convert to Deal Wizard" switch on CRM Settings
 	{"dt": "Custom Field", "filters": [["name", "=", "FCRM Settings-enable_convert_to_deal_wizard"]]},
-	# Starting set of question -> answer -> value mappings for the ERPNext Customer
-	# step; edit, disable or add to these freely in Customer Wizard Mapping.
-	{"dt": "Customer Wizard Mapping"},
 ]
 
 # Store the switch's default (enabled) once; never overwrites a saved value
+before_migrate = "pranera_crm.setup.before_migrate"
 after_install = "pranera_crm.setup.after_install"
 after_migrate = "pranera_crm.setup.after_migrate"

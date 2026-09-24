@@ -105,11 +105,9 @@ import { isSupported, selectOptions } from '@/lib/layout'
 import { __ } from '@/translation'
 
 const props = defineProps({
-  // a DocField-like dict: { fieldname, label, fieldtype, options, reqd, read_only, description }
   field: { type: Object, required: true },
   modelValue: { type: [String, Number, Boolean, null], default: null },
   error: { type: String, default: '' },
-  // CRM Deal Status rows; used to render the special-cased `status` field
   statuses: { type: Array, default: () => [] },
   disabled: { type: Boolean, default: false },
 })
@@ -124,7 +122,6 @@ const isDisabled = computed(() => props.disabled || !!props.field.read_only)
 const kind = computed(() => {
   const f = props.field
   if (!isSupported(f)) return 'unsupported'
-  // CRM's own modal renders `status` as a select of deal statuses
   if (f.fieldname === 'status' && f.fieldtype === 'Link' && props.statuses.length) return 'status'
   if (f.fieldtype === 'Link' && f.options) return 'link'
   if (f.fieldtype === 'Select') return 'select'

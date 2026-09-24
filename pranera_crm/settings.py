@@ -4,7 +4,6 @@ import frappe
 from frappe.utils import cint
 
 SETTINGS = "FCRM Settings"
-# Custom Field on FCRM Settings (shipped as a fixture, see fixtures/custom_field.json)
 ENABLE_FIELD = "enable_convert_to_deal_wizard"
 
 
@@ -26,7 +25,6 @@ def is_wizard_enabled() -> bool:
 	return True if not value else bool(cint(value[0][0]))
 
 
-# Set once the default has been written, so an admin's later choice is never overwritten
 DEFAULT_APPLIED = "pranera_crm_wizard_default_applied"
 
 

@@ -1,7 +1,6 @@
 import { __ } from '@/translation'
 import { getSite } from './site'
 
-// Frappe's number_format setting -> separators (see frappe/public/js/frappe/utils/number_format.js)
 const NUMBER_FORMATS = {
   '#,###.##': { decimal: '.', group: ',', precision: 2 },
   '#.###,##': { decimal: ',', group: '.', precision: 2 },

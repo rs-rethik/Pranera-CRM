@@ -2,13 +2,12 @@
   <main
     class="min-h-dvh bg-surface-base px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-[max(2rem,env(safe-area-inset-top))] sm:pt-[8vh]"
   >
-    <div class="mx-auto w-full" :class="isReview ? 'max-w-3xl' : 'max-w-md'">
+    <div class="mx-auto w-full max-w-3xl">
       <StepDots v-if="active" :total="STEPS.length" :current="stepIndex" />
 
       <div class="rounded-lg border border-outline-gray-2 bg-surface-base p-5 sm:px-10 sm:py-8">
         <LoadingText v-if="loading" class="justify-center" :text="__('Loading...')" />
 
-        <!-- couldn't load -->
         <div v-else-if="loadError" class="space-y-4">
           <ErrorMessage :message="loadError" />
           <div class="flex justify-end gap-2">
@@ -17,7 +16,6 @@
           </div>
         </div>
 
-        <!-- already converted -->
         <div v-else-if="wizard.ctx?.converted" class="space-y-4 text-center">
           <h2 class="text-xl font-semibold text-ink-gray-9">{{ __('Already converted') }}</h2>
           <p class="text-base text-ink-gray-6">
@@ -40,7 +38,6 @@
           <a :href="leadHref"><Button variant="solid">{{ __('Open lead') }}</Button></a>
         </div>
 
-        <!-- the deal converted, but the ERPNext customer step needs the user's input -->
         <div v-else-if="customerFollowUp" class="space-y-4">
           <h2 class="text-xl font-semibold text-ink-gray-9">{{ __('Deal converted') }}</h2>
 
@@ -60,12 +57,12 @@
             <ErrorMessage :message="customerFollowUp.message" />
             <div class="flex flex-wrap gap-2">
               <Button variant="solid" :loading="followUpBusy" @click="retryCustomerSetup">{{ __('Try again') }}</Button>
+              <Button variant="subtle" :disabled="followUpBusy" @click="editAndRetry">{{ __('Edit details') }}</Button>
               <a :href="dealHref(customerFollowUp.deal)"><Button variant="subtle">{{ __('Continue to deal') }}</Button></a>
             </div>
           </template>
         </div>
 
-        <!-- the wizard -->
         <template v-else-if="active">
           <p v-if="draftInfo" class="mb-4 text-sm text-ink-gray-5">
             {{ __('Draft restored from {0}.', [savedAgo(draftInfo.savedAt)]) }}
@@ -84,7 +81,7 @@
             <Button v-if="stepIndex > 0" variant="subtle" :disabled="submitting" @click="back">{{ __('Back') }}</Button>
             <Button v-if="!isLast" variant="solid" @click="next">{{ __('Next') }}</Button>
             <Button v-else variant="solid" :loading="submitting" :disabled="!online || submitting" @click="submit">
-              {{ __('Convert to Deal') }}
+              {{ retryDeal ? __('Save and try again') : __('Convert to Deal') }}
             </Button>
           </div>
         </template>
@@ -119,7 +116,6 @@ const router = useRouter()
 const online = useOnline()
 const user = window.pranera_user
 
-// Shared with the step components (see steps/*.vue).
 const wizard = reactive({
   ctx: null,
   form: null,
@@ -137,15 +133,14 @@ const submitting = ref(false)
 const submitError = ref('')
 const draftInfo = ref(null)
 const errorBox = ref(null)
-const customerFollowUp = ref(null) // { type: 'duplicate' | 'error', deal, existingCustomer?, message? }
+const customerFollowUp = ref(null)
 const followUpBusy = ref(false)
+const retryDeal = ref(null)
 let finished = false
 let draftStep = null
 
 const active = computed(() => ready.value && !!wizard.form)
 const isLast = computed(() => stepIndex.value === STEPS.length - 1)
-// the Review step lays its content out in two columns, so it gets the wide card
-const isReview = computed(() => isLast.value)
 const leadHref = computed(() => `/crm/leads/${encodeURIComponent(props.name)}`)
 const crmHref = '/crm'
 const dealHref = (deal) => `/crm/deals/${encodeURIComponent(deal)}`
@@ -188,9 +183,6 @@ async function load() {
   }
 }
 
-// ---- step <-> URL ---------------------------------------------------------
-// The current step lives in ?step= so the browser back button walks the steps.
-
 function syncStep() {
   if (!active.value) return
   const requested = route.query.step ?? draftStep
@@ -223,15 +215,11 @@ function next() {
 }
 
 function back() {
-  // If the previous history entry is the previous step, really go back so the
-  // history doesn't grow; otherwise (deep link, refresh) step back in place.
   const previous = window.history.state?.back
   const previousStep = previous ? new URL(previous, window.location.origin).searchParams.get('step') : null
   if (previousStep === String(stepIndex.value)) router.back()
   else goTo(stepIndex.value - 1, { replace: true })
 }
-
-// ---- matches for edited "create new" values --------------------------------
 
 const refreshCandidates = debounce(async () => {
   if (!active.value || !online.value || finished) return
@@ -247,7 +235,7 @@ const refreshCandidates = debounce(async () => {
       mobile_no: contact.mobile_no,
     })
   } catch {
-    /* matches are a hint only; keep the previous ones */
+    /* noop */
   }
 }, 600)
 
@@ -263,8 +251,6 @@ watch(
   },
 )
 
-// ---- draft (IndexedDB, keyed by lead) --------------------------------------
-
 function snapshot() {
   return {
     form: JSON.parse(JSON.stringify(wizard.form)),
@@ -279,9 +265,6 @@ const persist = debounce(() => {
 
 watch([() => wizard.form, stepIndex], () => persist(), { deep: true })
 
-// Don't lose the last keystrokes when the tab is hidden, reloaded or closed. The
-// IndexedDB write is async and can be cut off during unload, so also write a
-// synchronous localStorage copy (loadDraft picks the newest).
 function flushDraft() {
   if (!active.value || finished) return
   saveDraftSync(user, props.name, snapshot())
@@ -316,12 +299,9 @@ function savedAgo(timestamp) {
   return __('{0} d ago', [Math.round(hours / 24)])
 }
 
-// ---- submit ------------------------------------------------------------------
-
 async function submit() {
   if (submitting.value || !online.value) return
 
-  // re-check every step; jump to the first one that has a problem
   for (let i = 0; i < STEPS.length - 1; i++) {
     if (!isStepValid(i, wizard.form, wizard.ctx)) {
       goTo(i)
@@ -333,16 +313,15 @@ async function submit() {
   submitting.value = true
   submitError.value = ''
   try {
-    const response = await api('pranera_crm.api.convert', toPayload(wizard.form, props.name))
-    // The deal is converted from here on regardless of what follows: never re-run
-    // convert() again for this lead (it would fail with "already converted").
+    const response = retryDeal.value
+      ? await api('pranera_crm.api.setup_customer_for_deal', { deal: retryDeal.value, ...customerPayload(wizard.form) })
+      : await api('pranera_crm.api.convert', toPayload(wizard.form, props.name))
     finished = true
     persist.cancel()
     await clearDraft(user, props.name)
-    handleConvertResponse(response)
+    handleConvertResponse(response, retryDeal.value)
   } catch (err) {
     if (err?.exc_type === 'LeadAlreadyConverted') {
-      // converted meanwhile (double tap, another tab): show where the deal went
       finished = true
       persist.cancel()
       await clearDraft(user, props.name)
@@ -357,18 +336,18 @@ async function submit() {
   }
 }
 
-function handleConvertResponse(response) {
+function handleConvertResponse(response, dealOverride) {
   submitting.value = false
+  const deal = dealOverride || response.deal
   if (response.duplicate_customer) {
-    customerFollowUp.value = { type: 'duplicate', deal: response.deal, existingCustomer: response.duplicate_customer }
+    customerFollowUp.value = { type: 'duplicate', deal, existingCustomer: response.duplicate_customer }
     return
   }
   if (response.customer_error) {
-    customerFollowUp.value = { type: 'error', deal: response.deal, message: response.customer_error }
+    customerFollowUp.value = { type: 'error', deal, message: response.customer_error }
     return
   }
-  // full page navigation: /crm is a different app; keep the spinner until it loads
-  window.location.assign(dealHref(response.deal))
+  window.location.assign(dealHref(deal))
 }
 
 async function confirmDuplicateCustomer() {
@@ -410,6 +389,13 @@ async function retryCustomerSetup() {
   } finally {
     followUpBusy.value = false
   }
+}
+
+function editAndRetry() {
+  retryDeal.value = customerFollowUp.value.deal
+  customerFollowUp.value = null
+  wizard.showErrors = false
+  goTo(0)
 }
 
 onMounted(load)

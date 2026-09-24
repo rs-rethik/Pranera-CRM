@@ -11,6 +11,14 @@ export const STEPS = [
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
+const GST_GATE_KEY = 'gst_registered'
+
+/** Bridge-independent questions (Territory, Industry, ...) always apply; the rest
+ * only when the "Set up this customer in ERPNext" toggle is on for this conversion. */
+function bridgeAwareQuestions(questions, bridgeToggleOn) {
+  return (questions || []).filter((q) => bridgeToggleOn || !q.requires_erpnext_bridge)
+}
+
 /**
  * Validate one step. Returns { fieldname: message }; an empty object means the
  * step is valid. `form` is the wizard's single reactive state, `ctx` the
@@ -27,19 +35,29 @@ export function validateStep(index, form, ctx) {
       errors.annual_revenue = __('Annual revenue cannot be negative')
     }
 
-    // Address is entirely optional, but once started (address_line1 given) it must
-    // be complete enough for Address's own core requirements.
     const address = form.customer?.address
-    if (form.customer?.enabled && address && !isEmpty(address.address_line1)) {
-      if (isEmpty(address.city)) errors.customer_city = __('{0} is required', [__('City')])
-      if (isEmpty(address.country)) errors.customer_country = __('{0} is required', [__('Country')])
+    if (form.customer?.enabled && address?.mode === 'existing') {
+      if (!address.existing) errors.customer_existing_address = __('Please select an existing address')
+    } else if (form.customer?.enabled && address && !isEmpty(address.values.address_line1)) {
+      if (isEmpty(address.values.city)) errors.customer_city = __('{0} is required', [__('City')])
+      if (isEmpty(address.values.country)) errors.customer_country = __('{0} is required', [__('Country')])
+      if (address.values.country === 'India' && isEmpty(address.values.state)) {
+        errors.customer_state = __('{0} is required', [__('State')])
+      }
     }
 
-    // mapping questions flagged Mandatory must be answered before moving on
-    if (form.customer?.enabled) {
-      for (const q of unansweredMandatory(ctx?.customer?.organization_questions, form.customer.answers)) {
-        errors[`cq_${q.question_key}`] = __('{0} is required', [q.label])
-      }
+    if (
+      form.customer?.enabled &&
+      address?.mode !== 'existing' &&
+      form.customer.answers?.[GST_GATE_KEY] === 'yes' &&
+      isEmpty(address?.values.gstin)
+    ) {
+      errors.customer_gstin = __('{0} is required', [__('GSTIN / UIN')])
+    }
+
+    const orgQuestions = bridgeAwareQuestions(ctx?.customer?.organization_questions, form.customer?.enabled)
+    for (const q of unansweredMandatory(orgQuestions, form.customer?.answers)) {
+      errors[`cq_${q.question_key}`] = __('{0} is required', [q.label])
     }
   }
 
@@ -54,10 +72,9 @@ export function validateStep(index, form, ctx) {
       const email = contact.values.email
       if (!isEmpty(email) && !EMAIL.test(String(email).trim())) errors.email = __('Enter a valid email address')
     }
-    if (form.customer?.enabled) {
-      for (const q of unansweredMandatory(ctx?.customer?.contact_questions, form.customer.contactAnswers)) {
-        errors[`cq_${q.question_key}`] = __('{0} is required', [q.label])
-      }
+    const contactQuestions = bridgeAwareQuestions(ctx?.customer?.contact_questions, form.customer?.enabled)
+    for (const q of unansweredMandatory(contactQuestions, form.customer?.contactAnswers)) {
+      errors[`cq_${q.question_key}`] = __('{0} is required', [q.label])
     }
   }
 

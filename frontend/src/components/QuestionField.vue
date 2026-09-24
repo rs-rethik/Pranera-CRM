@@ -18,8 +18,6 @@ import { defaultAnswer } from '@/lib/questions'
 import { __ } from '@/translation'
 
 const props = defineProps({
-  // one entry from get_wizard_context's organization_questions / contact_questions,
-  // or refresh_customer_questions's response for a single scope
   question: { type: Object, required: true },
   modelValue: { type: String, default: null },
   error: { type: String, default: '' },

@@ -1,7 +1,3 @@
-// Site properties, as CRM follows them: language, direction, formats, currency
-// and branding. They arrive in the boot data as `window.pranera_site`
-// (see pranera_crm/settings.py).
-
 const DEFAULTS = {
   lang: 'en',
   rtl: false,

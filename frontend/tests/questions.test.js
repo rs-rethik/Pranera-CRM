@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { defaultAnswer, resolvedFields, reviewRows, unansweredMandatory, visibleQuestions } from '@/lib/questions'
+import {
+  defaultAnswer,
+  descendantKeys,
+  resolvedFields,
+  reviewRows,
+  unansweredMandatory,
+  visibleQuestions,
+} from '@/lib/questions'
 
 const fixed = (overrides = {}) => ({
   question_key: 'q1',
@@ -140,7 +147,6 @@ describe('branching operator and mandatory flag', () => {
   it('lists visible mandatory questions that nothing satisfies', () => {
     expect(unansweredMandatory([country, overseas], {})).toEqual([country])
     expect(unansweredMandatory([country, overseas], { country: 'india' })).toEqual([])
-    // a mandatory question with a fallback never blocks
     const withFallback = fixed({ question_key: 'cur', is_mandatory: true, fallback_value: 'INR' })
     expect(unansweredMandatory([withFallback], {})).toEqual([])
   })
@@ -203,10 +209,8 @@ describe('resolvedFields (review values)', () => {
         { label: 'Composition', value: 'composition', mapped_value: 'Registered Composition' },
       ],
     })
-    // GST follow-up unanswered: the fallback stands
     let { rows } = resolvedFields([first, later], {})
     expect(rows[0]).toMatchObject({ value: 'Unregistered', was_fallback: true })
-    // follow-up answered: it overlays the fallback
     ;({ rows } = resolvedFields([first, later], { gst_type: 'regular' }))
     expect(rows).toHaveLength(1)
     expect(rows[0]).toMatchObject({ value: 'Registered Regular', was_fallback: false })
@@ -252,5 +256,33 @@ describe('resolvedFields (review values)', () => {
     expect(resolvedFields([parent, child], { location: 'elsewhere', gst: 'no' }).rows).toEqual([
       expect.objectContaining({ key: 'Customer.location', value: 'Rest Of The World' }),
     ])
+  })
+})
+
+describe('descendantKeys', () => {
+  const gate = fixed({ question_key: 'gst_registered' })
+  const child = fixed({ question_key: 'gst_registration_type', depends_on_question: 'gst_registered' })
+  const grandchild = fixed({ question_key: 'gst_sez', depends_on_question: 'gst_registration_type' })
+  const unrelated = fixed({ question_key: 'customer_type' })
+
+  it('finds direct and nested descendants of the root key', () => {
+    expect(descendantKeys([gate, child, grandchild, unrelated], 'gst_registered')).toEqual(
+      new Set(['gst_registration_type', 'gst_sez']),
+    )
+  })
+
+  it('excludes the root key itself and unrelated questions', () => {
+    const keys = descendantKeys([gate, child, grandchild, unrelated], 'gst_registered')
+    expect(keys.has('gst_registered')).toBe(false)
+    expect(keys.has('customer_type')).toBe(false)
+  })
+
+  it('is empty when nothing depends on the root key', () => {
+    expect(descendantKeys([unrelated], 'gst_registered')).toEqual(new Set())
+  })
+
+  it('is empty for an empty or missing question list', () => {
+    expect(descendantKeys([], 'gst_registered')).toEqual(new Set())
+    expect(descendantKeys(undefined, 'gst_registered')).toEqual(new Set())
   })
 })

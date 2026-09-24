@@ -37,7 +37,6 @@ const { ctx, form } = w
 const errors = toRef(w, 'errors')
 const showErrors = toRef(w, 'showErrors')
 
-// Rendered straight from CRM's "Required Fields" layout for CRM Deal.
 const tabs = computed(() =>
   (ctx.deal_layout || [])
     .map((tab) => ({ ...tab, sections: visibleSections(tab) }))

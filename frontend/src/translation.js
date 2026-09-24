@@ -1,8 +1,3 @@
-// Same contract as Frappe CRM's translation plugin: messages come from the boot
-// data (`translated_messages`, i.e. the site/user language, merged from every
-// app's translations and the Translation doctype) and unknown strings fall back
-// to English. Kept free of frappe-ui imports so it also works in unit tests.
-
 let messages = {}
 
 export function setTranslations(translated) {

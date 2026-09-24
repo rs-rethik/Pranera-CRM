@@ -1,7 +1,8 @@
 import frappe
 
 from crm.tests import CRMTestCase
-from pranera_crm.api import LeadAlreadyConverted, convert, get_wizard_context
+from pranera_crm.api import LeadAlreadyConverted, convert, find_candidates, get_wizard_context
+from pranera_crm.tests.test_customer_wizard import isolate_from_seed_questions, make_question
 
 
 def convert_deal(*args, **kwargs):
@@ -71,8 +72,6 @@ class TestConvert(CRMTestCase):
 		frappe.set_user("Administrator")
 		frappe.db.rollback()
 
-	# -- permissions ------------------------------------------------------ #
-
 	def test_permission_denied(self):
 		lead = make_lead()
 		user = make_user(roles=[])
@@ -99,12 +98,9 @@ class TestConvert(CRMTestCase):
 	def test_sales_user_can_convert_own_lead(self):
 		user = make_user(roles=["Sales User"])
 		frappe.set_user(user)
-		# CRM restricts leads by owner / assignment / hierarchy
 		lead = make_lead(lead_owner=user)
 		deal = convert_deal(lead.name, deal=self.deal)
 		self.assertEqual(frappe.db.get_value("CRM Deal", deal, "lead"), lead.name)
-
-	# -- guards ----------------------------------------------------------- #
 
 	def test_already_converted(self):
 		lead = make_lead()
@@ -127,7 +123,6 @@ class TestConvert(CRMTestCase):
 		if not lost:
 			self.skipTest("site has no Lost lead status")
 		lead = make_lead()
-		# skip CRM's "lost reason required" validation, we only need the status type
 		lead.db_set("status", lost[0])
 		with self.assertRaises(frappe.ValidationError):
 			convert(lead.name, deal=self.deal)
@@ -171,8 +166,6 @@ class TestConvert(CRMTestCase):
 		deal = convert_deal(lead.name, deal=frappe.as_json(self.deal))
 		self.assertEqual(frappe.db.get_value("CRM Deal", deal, "status"), self.deal["status"])
 
-	# -- happy paths ------------------------------------------------------ #
-
 	def test_new_org_and_new_contact(self):
 		lead = make_lead()
 		original_org = lead.organization
@@ -195,7 +188,6 @@ class TestConvert(CRMTestCase):
 
 		doc = frappe.get_doc("CRM Deal", deal)
 		self.assertEqual(doc.lead, lead.name)
-		# the Org / Contact were built from the edited values, not the originals
 		self.assertEqual(doc.organization, renamed)
 		self.assertEqual(frappe.db.get_value("CRM Organization", renamed, "website"), "https://renamed.example.com")
 		self.assertFalse(frappe.db.exists("CRM Organization", original_org))
@@ -228,7 +220,6 @@ class TestConvert(CRMTestCase):
 			deal=self.deal,
 			existing_organization=org.name,
 			existing_contact=contact.name,
-			# must be ignored: org / contact are not being created
 			lead_updates={"organization": "Should Not Exist", "first_name": "Ignored"},
 		)
 
@@ -241,6 +232,89 @@ class TestConvert(CRMTestCase):
 		lead.reload()
 		self.assertEqual(lead.converted, 1)
 		self.assertNotEqual(lead.first_name, "Ignored")
+
+
+class TestIndividualCustomerSkipsOrganization(CRMTestCase):
+	"""An "Individual" answer to customer_type means no CRM Organization gets
+	created, regardless of what the client sends for the organization fields —
+	see ``api._individual_customer_selected``."""
+
+	def setUp(self):
+		frappe.set_user("Administrator")
+		self.deal = {"status": deal_status()}
+
+	def tearDown(self):
+		frappe.set_user("Administrator")
+		frappe.db.rollback()
+
+	def test_individual_answer_overrides_a_client_sent_organization_name(self):
+		lead = make_lead()
+		orgs = frappe.db.count("CRM Organization")
+
+		deal = convert_deal(
+			lead.name,
+			deal=self.deal,
+			lead_updates={"organization": "Should Not Be Created"},
+			customer_answers=frappe.as_json({"customer_type": "individual"}),
+		)
+
+		self.assertEqual(frappe.db.count("CRM Organization"), orgs)
+		self.assertFalse(frappe.db.exists("CRM Organization", "Should Not Be Created"))
+		doc = frappe.get_doc("CRM Deal", deal)
+		self.assertFalse(doc.organization)
+		lead.reload()
+		self.assertFalse(lead.organization)
+
+	def test_company_answer_still_creates_an_organization(self):
+		lead = make_lead()
+		orgs = frappe.db.count("CRM Organization")
+
+		deal = convert_deal(
+			lead.name, deal=self.deal, customer_answers=frappe.as_json({"customer_type": "company"})
+		)
+
+		self.assertEqual(frappe.db.count("CRM Organization"), orgs + 1)
+		doc = frappe.get_doc("CRM Deal", deal)
+		self.assertEqual(doc.organization, lead.organization)
+
+	def test_no_answer_at_all_still_creates_an_organization(self):
+		lead = make_lead()
+		orgs = frappe.db.count("CRM Organization")
+
+		deal_name = convert_deal(lead.name, deal=self.deal)
+
+		self.assertEqual(frappe.db.count("CRM Organization"), orgs + 1)
+		self.assertEqual(frappe.db.get_value("CRM Deal", deal_name, "organization"), lead.organization)
+
+	def test_existing_organization_wins_over_an_individual_answer(self):
+		lead = make_lead()
+		org = make_org()
+
+		deal = convert_deal(
+			lead.name,
+			deal=self.deal,
+			existing_organization=org.name,
+			customer_answers=frappe.as_json({"customer_type": "individual"}),
+		)
+
+		doc = frappe.get_doc("CRM Deal", deal)
+		self.assertEqual(doc.organization, org.name)
+
+	def test_customer_named_after_contact_when_individual(self):
+		frappe.db.set_single_value("ERPNext CRM Settings", "enabled", 1)
+		lead = make_lead()
+		response = convert(
+			lead.name,
+			deal=self.deal,
+			setup_customer=True,
+			customer_answers=frappe.as_json({"customer_type": "individual"}),
+		)
+		self.assertIsNone(response["customer_error"])
+		doc = frappe.get_doc("CRM Deal", response["deal"])
+		self.assertFalse(doc.organization)
+		contact = frappe.get_doc("Contact", doc.contacts[0].contact)
+		customer = frappe.get_doc("Customer", response["customer"])
+		self.assertEqual(customer.customer_name, contact.full_name)
 
 
 class TestWizardContext(CRMTestCase):
@@ -274,6 +348,103 @@ class TestWizardContext(CRMTestCase):
 		self.assertTrue(ctx["converted"])
 		self.assertEqual(ctx["deal"], deal)
 
+	def test_custom_field_prefill_agrees_with_what_convert_to_deal_actually_copies(self):
+		"""_deal_defaults's custom-field matching (pranera's own Deal->Lead lookup)
+		must always agree with CRM's own get_matching_custom_deal_field (the
+		Lead->Deal direction create_deal() actually uses to auto-copy fields), or
+		the wizard's Deal prefill could silently diverge from what convert_to_deal
+		actually copies. Regression for the LEAD_DEAL_FIELD_MAP / is_custom_field
+		duplication (see README's Q1) — also checks the prefilled *value*, not just
+		the fieldname match.
+
+		Deliberately does not call convert_to_deal() or mark the Deal field
+		mandatory: both would leave cascading records (a Deal, a new Contact/
+		Organization, or a Deal-wide required-field side effect for every other
+		test in this process) that Custom Field's own rollback quirk (below) would
+		make hard to clean up reliably.
+		"""
+		frappe.set_user("Administrator")
+		suffix = _hash()
+		label = f"Prefill Parity {suffix}"
+		lead_fieldname = f"custom_prefill_{suffix}"
+		deal_fieldname = f"custom_prefill_deal_{suffix}"
+		lead_cf_name = f"CRM Lead-{lead_fieldname}"
+		deal_cf_name = f"CRM Deal-{deal_fieldname}"
+
+		try:
+			frappe.get_doc(
+				{"doctype": "Custom Field", "dt": "CRM Lead", "fieldname": lead_fieldname, "label": label, "fieldtype": "Data"}
+			).insert(ignore_permissions=True)
+			frappe.get_doc(
+				{"doctype": "Custom Field", "dt": "CRM Deal", "fieldname": deal_fieldname, "label": label, "fieldtype": "Data"}
+			).insert(ignore_permissions=True)
+			frappe.clear_cache(doctype="CRM Lead")
+			frappe.clear_cache(doctype="CRM Deal")
+
+			from crm.fcrm.doctype.crm_lead.crm_lead import get_matching_custom_deal_field
+			from pranera_crm.api import _deal_defaults
+
+			lead_meta = frappe.get_meta("CRM Lead")
+			deal_meta = frappe.get_meta("CRM Deal")
+			lead_field = lead_meta.get_field(lead_fieldname)
+			deal_field = deal_meta.get_field(deal_fieldname)
+
+			self.assertEqual(get_matching_custom_deal_field(lead_field, deal_meta), deal_fieldname)
+
+			lead = make_lead(**{lead_fieldname: "Shared Value"})
+			defaults = _deal_defaults(lead, [deal_field])
+			self.assertEqual(defaults.get(deal_fieldname), "Shared Value")
+		finally:
+			if frappe.db.exists("CRM Lead", locals().get("lead", frappe._dict()).get("name")):
+				frappe.delete_doc("CRM Lead", lead.name, ignore_permissions=True, force=True)
+			for cf_name in (lead_cf_name, deal_cf_name):
+				if frappe.db.exists("Custom Field", cf_name):
+					frappe.delete_doc("Custom Field", cf_name, ignore_permissions=True, force=True)
+			frappe.clear_cache(doctype="CRM Lead")
+			frappe.clear_cache(doctype="CRM Deal")
+			frappe.db.commit()
+
+	def test_auto_organization_hidden_without_permission(self):
+		"""S1: auto_organization must be permission-filtered like the rest of
+		find_candidates — a user who can't read a same-named CRM Organization must
+		not learn it exists, even though its name is an exact match."""
+		frappe.set_user("Administrator")
+		org = make_org()
+		other_org = make_org()
+		user = make_user(roles=["Sales User"], prefix="cw-org-noperm")
+		frappe.get_doc(
+			{
+				"doctype": "User Permission",
+				"user": user,
+				"allow": "CRM Organization",
+				"for_value": other_org.name,
+			}
+		).insert(ignore_permissions=True)
+
+		frappe.set_user(user)
+		result = find_candidates(organization=org.organization_name)
+		self.assertIsNone(result["auto_organization"])
+
+	def test_auto_organization_resolves_normally_without_a_restriction(self):
+		frappe.set_user("Administrator")
+		org = make_org()
+		user = make_user(roles=["Sales User"], prefix="cw-org-ok")
+
+		frappe.set_user(user)
+		result = find_candidates(organization=org.organization_name)
+		self.assertEqual(result["auto_organization"], org.name)
+
+	def test_like_wildcards_escaped(self):
+		"""S4: a literal %/_ in the search term must not act as a SQL wildcard."""
+		frappe.set_user("Administrator")
+		target = make_org(name=f"100% Corp {_hash()}")
+		decoy = make_org()
+
+		result = find_candidates(organization=target.organization_name)
+		names = {r["name"] for r in result["organizations"]}
+		self.assertIn(target.name, names)
+		self.assertNotIn(decoy.name, names)
+
 
 class TestWhoami(CRMTestCase):
 	def tearDown(self):
@@ -290,7 +461,6 @@ class TestWhoami(CRMTestCase):
 	def test_whoami_is_guest_callable(self):
 		from pranera_crm.api import whoami
 
-		# the SPA relies on this to tell an expired session from a real 403
 		self.assertIn(whoami, frappe.guest_methods)
 
 
@@ -344,7 +514,6 @@ class TestWizardSwitch(CRMTestCase):
 		with self.assertRaises(WizardDisabled):
 			convert(lead.name, deal={"status": deal_status()})
 
-		# nothing was converted: CRM's own flow is unaffected and still works
 		lead.reload()
 		self.assertFalse(lead.converted)
 		from crm.fcrm.doctype.crm_lead.crm_lead import convert_to_deal
@@ -360,13 +529,11 @@ class TestWizardSwitch(CRMTestCase):
 	def test_default_is_written_once_and_never_overwrites_an_admin_choice(self):
 		from pranera_crm.settings import DEFAULT_APPLIED, ensure_default, is_wizard_enabled
 
-		# first run: the (possibly materialised-as-0) value becomes the default
 		frappe.db.set_default(DEFAULT_APPLIED, "")
 		self._set(0)
 		ensure_default()
 		self.assertTrue(is_wizard_enabled())
 
-		# afterwards the stored value belongs to the admin
 		self._set(0)
 		ensure_default()
 		self.assertFalse(is_wizard_enabled())
@@ -398,3 +565,94 @@ class TestSiteProperties(CRMTestCase):
 		self.assertEqual(props["lang"], frappe.local.lang)
 		self.assertIn("system", props["timezone"])
 		self.assertIn("name", props["brand"])
+
+
+class TestLeadQuestionResolution(CRMTestCase):
+	"""Territory/Industry/Salutation/Gender-style questions: resolved server-side
+	from ``customer_answers``/``contact_customer_answers`` and applied to the Lead
+	*before* conversion, regardless of the ERPNext bridge — see
+	``pranera_crm.api._resolve_lead_questions``."""
+
+	def setUp(self):
+		frappe.set_user("Administrator")
+		isolate_from_seed_questions()
+		self.deal = {"status": deal_status()}
+
+	def tearDown(self):
+		frappe.set_user("Administrator")
+		frappe.db.rollback()
+
+	def test_resolved_answer_applied_to_new_organization(self):
+		q = make_question(
+			requires_erpnext_bridge=0,
+			target_doctype="CRM Lead",
+			target_fieldname="territory",
+			options=[{"option_label": "India", "option_value": "india", "mapped_value": "India"}],
+		)
+		lead = make_lead()
+		deal = convert_deal(lead.name, deal=self.deal, customer_answers={q.question_key: "india"})
+		organization = frappe.db.get_value("CRM Deal", deal, "organization")
+		self.assertEqual(frappe.db.get_value("CRM Organization", organization, "territory"), "India")
+
+	def test_resolved_answer_applied_to_new_contact(self):
+		q = make_question(
+			requires_erpnext_bridge=0,
+			scope="Contact",
+			target_doctype="CRM Lead",
+			target_fieldname="salutation",
+			options=[{"option_label": "Dr", "option_value": "dr", "mapped_value": "Dr"}],
+		)
+		lead = make_lead()
+		deal = convert_deal(lead.name, deal=self.deal, contact_customer_answers={q.question_key: "dr"})
+		contact = frappe.get_doc("CRM Deal", deal).contacts[0].contact
+		self.assertEqual(frappe.db.get_value("Contact", contact, "salutation"), "Dr")
+
+	def test_skipped_for_an_existing_organization(self):
+		q = make_question(
+			requires_erpnext_bridge=0,
+			target_doctype="CRM Lead",
+			target_fieldname="territory",
+			options=[{"option_label": "India", "option_value": "india", "mapped_value": "India"}],
+		)
+		lead = make_lead()
+		org = make_org()
+		convert_deal(
+			lead.name,
+			deal=self.deal,
+			existing_organization=org.name,
+			customer_answers={q.question_key: "india"},
+		)
+		self.assertNotEqual(frappe.db.get_value("CRM Organization", org.name, "territory"), "India")
+
+	def test_applies_even_when_erpnext_bridge_declined(self):
+		"""Territory/Industry-style questions apply whether or not the caller asked
+		for ERPNext Customer setup — they aren't an ERPNext-only concern."""
+		q = make_question(
+			requires_erpnext_bridge=0,
+			target_doctype="CRM Lead",
+			target_fieldname="territory",
+			options=[{"option_label": "India", "option_value": "india", "mapped_value": "India"}],
+		)
+		lead = make_lead()
+		deal = convert_deal(
+			lead.name, deal=self.deal, setup_customer=False, customer_answers={q.question_key: "india"}
+		)
+		organization = frappe.db.get_value("CRM Deal", deal, "organization")
+		self.assertEqual(frappe.db.get_value("CRM Organization", organization, "territory"), "India")
+
+	def test_bridge_only_mandatory_question_does_not_block_a_declined_setup(self):
+		"""A mandatory ERPNext-only question must not block conversion when the
+		caller never asked for ERPNext Customer setup in the first place."""
+		make_question(
+			requires_erpnext_bridge=1,
+			is_mandatory=1,
+			target_doctype="Customer",
+			target_fieldname="customer_group",
+			options=[
+				{"option_label": "A", "option_value": "a", "mapped_value": "Commercial"},
+				{"option_label": "B", "option_value": "b", "mapped_value": "Individual"},
+			],
+		)
+		lead = make_lead()
+		deal = convert_deal(lead.name, deal=self.deal, setup_customer=False)
+		self.assertTrue(frappe.db.exists("CRM Deal", deal))

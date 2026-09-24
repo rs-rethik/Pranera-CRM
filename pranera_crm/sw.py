@@ -25,7 +25,6 @@ SCOPE = "/deal_wizard/"
 class ServiceWorkerRenderer(BaseRenderer):
 	def __init__(self, path=None, http_status_code=None):
 		super().__init__(path=path, http_status_code=http_status_code)
-		# fixed file name: nothing from the request ever reaches the filesystem
 		self.file_path = frappe.get_app_path("pranera_crm", "public", "frontend", "sw.js")
 
 	def can_render(self):
@@ -37,6 +36,5 @@ class ServiceWorkerRenderer(BaseRenderer):
 
 		response.mimetype = "text/javascript"
 		response.headers["Service-Worker-Allowed"] = SCOPE
-		# the browser must always revalidate the worker script to pick up updates
 		response.headers["Cache-Control"] = "no-cache, must-revalidate"
 		return response

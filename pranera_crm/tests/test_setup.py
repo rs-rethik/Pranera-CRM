@@ -1,0 +1,91 @@
+import frappe
+
+from crm.tests import CRMTestCase
+from pranera_crm import setup
+
+
+class TestEnsureTerritories(CRMTestCase):
+	"""F11: the seeded "territory" question's secondary target is ERPNext's own
+	Territory doctype, which only exists if the setup wizard's country was India."""
+
+	def setUp(self):
+		frappe.set_user("Administrator")
+
+	def tearDown(self):
+		frappe.set_user("Administrator")
+		frappe.db.rollback()
+
+	def test_seeds_both_crm_and_erpnext_territory(self):
+		frappe.db.delete("CRM Territory", {"name": ["in", ("India", "Rest Of The World")]})
+		frappe.db.delete("Territory", {"name": ["in", ("India", "Rest Of The World")]})
+
+		setup.ensure_territories()
+
+		for name in ("India", "Rest Of The World"):
+			self.assertTrue(frappe.db.exists("CRM Territory", name))
+			self.assertTrue(frappe.db.exists("Territory", name))
+
+	def test_idempotent_when_already_seeded(self):
+		setup.ensure_territories()
+		setup.ensure_territories()
+		self.assertTrue(frappe.db.exists("Territory", "India"))
+
+
+class TestEnsureCustomerWizardQuestions(CRMTestCase):
+	"""F1: seed-once, never re-touching a row (whether unedited or admin-customised)
+	that already exists — the whole point of moving this off the fixtures hook."""
+
+	def setUp(self):
+		frappe.set_user("Administrator")
+
+	def tearDown(self):
+		frappe.set_user("Administrator")
+		frappe.db.rollback()
+
+	def test_running_twice_does_not_duplicate_or_error(self):
+		setup.ensure_customer_wizard_questions()
+		count_before = frappe.db.count("Customer Wizard Mapping")
+		setup.ensure_customer_wizard_questions()
+		self.assertEqual(frappe.db.count("Customer Wizard Mapping"), count_before)
+
+	def test_admin_edit_survives_a_reseed(self):
+		setup.ensure_customer_wizard_questions()
+		name = frappe.db.get_value("Customer Wizard Mapping", {"question_key": "territory"}, "name")
+		self.assertTrue(name)
+
+		frappe.db.set_value("Customer Wizard Mapping", name, "enabled", 0)
+		setup.ensure_customer_wizard_questions()
+		self.assertEqual(frappe.db.get_value("Customer Wizard Mapping", name, "enabled"), 0)
+
+
+class TestEnsureErpnextCustomerSyncDisabled(CRMTestCase):
+	"""F2: pranera_crm's wizard is meant to be the only place a Customer gets
+	created from a Deal — default CRM's own competing setting off, once, the same
+	"never fight an admin's later choice" way `settings.ensure_default` does."""
+
+	SETTINGS = "ERPNext CRM Settings"
+	FIELD = "create_customer_on_status_change"
+
+	def setUp(self):
+		frappe.set_user("Administrator")
+
+	def tearDown(self):
+		frappe.set_user("Administrator")
+		frappe.db.rollback()
+
+	def test_disables_the_setting_by_default(self):
+		frappe.db.set_default(setup.ERPNEXT_SYNC_DEFAULT_APPLIED, "")
+		frappe.db.set_single_value(self.SETTINGS, self.FIELD, 1)
+
+		setup.ensure_erpnext_customer_sync_disabled()
+
+		self.assertEqual(frappe.db.get_single_value(self.SETTINGS, self.FIELD), 0)
+
+	def test_never_overwrites_an_admins_later_choice(self):
+		frappe.db.set_default(setup.ERPNEXT_SYNC_DEFAULT_APPLIED, "")
+		setup.ensure_erpnext_customer_sync_disabled()
+
+		frappe.db.set_single_value(self.SETTINGS, self.FIELD, 1)
+		setup.ensure_erpnext_customer_sync_disabled()
+
+		self.assertEqual(frappe.db.get_single_value(self.SETTINGS, self.FIELD), 1)

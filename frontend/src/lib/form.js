@@ -13,7 +13,6 @@ export function createForm(ctx) {
 
   return reactive({
     organization: {
-      // an exact name match is what CRM would reuse anyway, so start there
       mode: auto_organization ? 'existing' : 'new',
       existing: auto_organization || '',
       values: pick(ctx.organization_fields),
@@ -25,13 +24,15 @@ export function createForm(ctx) {
     },
     deal: { ...(ctx.deal_defaults || {}) },
     customer: {
-      // on by default whenever the ERPNext bridge applies; the user can decline
-      // it for this one conversion without turning the bridge off site-wide
       enabled: !!ctx.customer?.enabled,
       answers: {},
       contactAnswers: {},
       overrides: {},
-      address: addressFields,
+      address: {
+        mode: 'new',
+        existing: '',
+        values: addressFields,
+      },
     },
   })
 }
@@ -57,8 +58,13 @@ export function applyDraft(form, draft) {
         Object.assign(form.customer[key], saved.customer[key])
       }
     }
-    for (const field of Object.keys(form.customer.address)) {
-      if (field in (saved.customer.address || {})) form.customer.address[field] = saved.customer.address[field]
+    const savedAddress = saved.customer.address
+    if (savedAddress && typeof savedAddress === 'object') {
+      if (['new', 'existing'].includes(savedAddress.mode)) form.customer.address.mode = savedAddress.mode
+      if (typeof savedAddress.existing === 'string') form.customer.address.existing = savedAddress.existing
+      for (const field of Object.keys(form.customer.address.values)) {
+        if (field in (savedAddress.values || {})) form.customer.address.values[field] = savedAddress.values[field]
+      }
     }
   }
 }
@@ -98,11 +104,13 @@ export function toPayload(form, lead) {
 /** The `convert()` / `setup_customer_for_deal()` args for the ERPNext Customer section. */
 export function customerPayload(form) {
   const customer = form.customer
+  const address = customer?.address
   return {
     setup_customer: !!customer?.enabled,
     customer_answers: cleaned(customer?.answers),
     contact_customer_answers: cleaned(customer?.contactAnswers),
-    customer_address: cleaned(customer?.address),
+    customer_address: address?.mode === 'existing' ? {} : cleaned(address?.values),
+    customer_existing_address: address?.mode === 'existing' ? address.existing : '',
     customer_overrides: cleaned(customer?.overrides),
   }
 }

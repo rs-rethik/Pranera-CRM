@@ -11,6 +11,7 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
+    CandidateList: typeof import('./src/components/CandidateList.vue')['default']
     FieldControl: typeof import('./src/components/FieldControl.vue')['default']
     QuestionField: typeof import('./src/components/QuestionField.vue')['default']
     ReviewCard: typeof import('./src/components/ReviewCard.vue')['default']

@@ -1,9 +1,5 @@
 import { createStore, del, entries, get, set } from 'idb-keyval'
 
-// Drafts are kept per user so a shared device never shows one person's lead
-// data to another. They live only on this device (IndexedDB, with a
-// localStorage fallback when IndexedDB is unavailable, e.g. some private modes).
-
 const VERSION = 1
 const MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000
 const LS_PREFIX = 'pranera:draft:'
@@ -27,7 +23,7 @@ function writeLocal(user, lead, data) {
   try {
     localStorage.setItem(LS_PREFIX + keyFor(user, lead), JSON.stringify(record))
   } catch {
-    /* storage unavailable: the draft just isn't persisted */
+    /* noop */
   }
   return record
 }
@@ -45,7 +41,7 @@ export async function saveDraft(user, lead, data) {
   try {
     if (idb()) return await set(keyFor(user, lead), record, idb())
   } catch {
-    /* fall through to localStorage */
+    /* noop */
   }
   writeLocal(user, lead, data)
 }
@@ -56,12 +52,12 @@ export async function loadDraft(user, lead) {
   try {
     if (idb()) fromIdb = await get(keyFor(user, lead), idb())
   } catch {
-    /* ignore */
+    /* noop */
   }
   try {
     fromLocal = JSON.parse(localStorage.getItem(LS_PREFIX + keyFor(user, lead)) || 'null')
   } catch {
-    /* ignore */
+    /* noop */
   }
 
   const record = [fromIdb, fromLocal]
@@ -79,12 +75,12 @@ export async function clearDraft(user, lead) {
   try {
     if (idb()) await del(keyFor(user, lead), idb())
   } catch {
-    /* ignore */
+    /* noop */
   }
   try {
     localStorage.removeItem(LS_PREFIX + keyFor(user, lead))
   } catch {
-    /* ignore */
+    /* noop */
   }
 }
 
@@ -96,7 +92,7 @@ export async function listDrafts(user) {
       for (const [, record] of await entries(idb())) found.set(record.lead + record.user, record)
     }
   } catch {
-    /* ignore */
+    /* noop */
   }
   try {
     for (let i = 0; i < localStorage.length; i++) {
@@ -106,7 +102,7 @@ export async function listDrafts(user) {
       if (record) found.set(record.lead + record.user, record)
     }
   } catch {
-    /* ignore */
+    /* noop */
   }
 
   const live = []

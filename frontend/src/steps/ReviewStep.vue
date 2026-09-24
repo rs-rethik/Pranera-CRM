@@ -109,7 +109,6 @@ const { ctx, form } = w
 const candidates = toRef(w, 'candidates')
 const customer = form.customer
 
-// Values are shown the way CRM shows them: the site's date, number and currency formats.
 const show = (field, value) => (isEmpty(value) ? '\u2014' : formatValue(field, value))
 const filled = (rows) => rows.filter((r) => r.value !== '\u2014')
 const fieldRows = (fields, values) =>
@@ -155,9 +154,12 @@ const dealRows = computed(() => {
   return rows.length ? rows : [{ label: __('Details'), value: __('No extra details are required.') }]
 })
 
-// -- Customer (ERPNext): the resolved values, grouped by what they're written on --
-
-const GROUP_TITLES = { Customer: __('Customer'), Address: __('Address'), Contact: __('Contact') }
+const GROUP_TITLES = {
+  Customer: __('Customer'),
+  Address: __('Address'),
+  Contact: __('Contact'),
+  'CRM Lead': __('Organization & Contact'),
+}
 
 const orgResolved = computed(() => resolvedFields(ctx.customer?.organization_questions, customer.answers, customer.overrides))
 const contactResolved = computed(() =>
@@ -199,7 +201,6 @@ const valueGroups = computed(() => {
   return groups
 })
 
-// which rows currently show their edit control (local UI state, not persisted)
 const overriding = reactive({})
 
 function setOverride(row, value) {
@@ -221,7 +222,11 @@ const selectItems = (row) => [
 ]
 
 const addressSummary = computed(() => {
-  const a = customer.address
+  const address = customer.address
+  if (address.mode === 'existing') {
+    return address.existing ? __('Address: {0}', [address.existing]) : __('No address will be added.')
+  }
+  const a = address.values
   const parts = [a.address_line1, a.city, a.state, a.country].filter(Boolean)
   return parts.length ? __('Address: {0}', [parts.join(', ')]) : __('No address will be added.')
 })

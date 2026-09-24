@@ -1,9 +1,3 @@
-// Client-side mirror of pranera_crm.customer_wizard: which questions are visible
-// given the current answers, and what they'd resolve to. This is for instant UI
-// feedback only (show/hide follow-ups, a live Review preview) — the server
-// re-resolves everything from scratch at submit time and is the only thing that
-// actually writes a value, so nothing here needs to be tamper-proof.
-
 import { __ } from '@/translation'
 
 /** The answer that applies with no interaction: the option marked default, or the
@@ -31,6 +25,28 @@ function isVisible(question, answers, byKey) {
 export function visibleQuestions(questions, answers) {
   const byKey = Object.fromEntries((questions || []).map((q) => [q.question_key, q]))
   return (questions || []).filter((q) => isVisible(q, answers, byKey))
+}
+
+/**
+ * question_keys that (transitively) depend on rootKey, e.g. every follow-up
+ * gated on a "gate" question — even ones nested behind another follow-up.
+ * Does not care whether the questions are currently visible.
+ */
+export function descendantKeys(questions, rootKey) {
+  const keys = new Set()
+  let added = true
+  while (added) {
+    added = false
+    for (const q of questions || []) {
+      if (keys.has(q.question_key) || q.question_key === rootKey) continue
+      const parent = q.depends_on_question
+      if (parent === rootKey || keys.has(parent)) {
+        keys.add(q.question_key)
+        added = true
+      }
+    }
+  }
+  return keys
 }
 
 /**
@@ -80,10 +96,8 @@ export function resolvedFields(questions, answers = {}, overrides = {}) {
     }
 
     const key = `${question.target_doctype}.${question.target_fieldname}`
-    // overlay: only a question that resolves a value takes over the field
     if (value == null) {
       if (!rows.has(key) && overridden) {
-        // an override that empties the field: keep the row so it stays editable
         rows.set(key, emptyRow(question, overridden))
       }
       continue

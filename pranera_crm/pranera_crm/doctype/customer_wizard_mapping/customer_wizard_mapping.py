@@ -8,8 +8,6 @@ from frappe import _
 from frappe.model.document import Document
 from frappe.utils import cint
 
-# target_fieldname values that don't need to exist as a plain field on target_doctype
-# because the resolver special-cases them (see pranera_crm/customer_wizard.py).
 SPECIAL_TARGETS = {("Customer", "sales_team")}
 
 
@@ -37,35 +35,50 @@ class CustomerWizardMapping(Document):
 		override_roles: DF.SmallText | None
 		question_key: DF.Data
 		question_type: DF.Literal["Fixed", "Dynamic"]
+		requires_erpnext_bridge: DF.Check
 		scope: DF.Literal["Organization", "Contact"]
+		secondary_target_doctype: DF.Literal["", "Customer", "Address", "Contact", "CRM Lead"]
+		secondary_target_fieldname: DF.Data | None
 		sequence: DF.Int
 		source_doctype: DF.Link | None
 		source_filters: DF.Code | None
 		source_label_field: DF.Data | None
-		target_doctype: DF.Literal["Customer", "Address", "Contact"]
+		target_doctype: DF.Literal["Customer", "Address", "Contact", "CRM Lead"]
 		target_fieldname: DF.Data
 	# end: auto-generated types
 
 	def validate(self):
 		self.validate_target_field()
+		self.validate_secondary_target()
 		self.validate_options()
+		self.validate_mapped_master_values()
 		self.validate_dynamic_source()
 		self.validate_branching()
 		self.validate_override_roles()
 
 	def validate_target_field(self):
-		if (self.target_doctype, self.target_fieldname) in SPECIAL_TARGETS:
+		self._validate_field_target(self.target_doctype, self.target_fieldname)
+
+	def validate_secondary_target(self):
+		if not self.secondary_target_doctype and not self.secondary_target_fieldname:
 			return
-		field = frappe.get_meta(self.target_doctype).get_field(self.target_fieldname)
+		if not self.secondary_target_doctype or not self.secondary_target_fieldname:
+			frappe.throw(_("Set both Secondary Target Doctype and Secondary Target Fieldname, or neither."))
+		self._validate_field_target(self.secondary_target_doctype, self.secondary_target_fieldname)
+
+	def _validate_field_target(self, doctype, fieldname):
+		if (doctype, fieldname) in SPECIAL_TARGETS:
+			return
+		field = frappe.get_meta(doctype).get_field(fieldname)
 		if not field:
 			frappe.throw(
-				_("{0} has no field {1}").format(self.target_doctype, frappe.bold(self.target_fieldname)),
+				_("{0} has no field {1}").format(doctype, frappe.bold(fieldname)),
 				title=_("Unknown Target Field"),
 			)
 		if field.fieldtype in ("Table", "Table MultiSelect"):
 			frappe.throw(
 				_("{0}.{1} is a table field and can't be set directly; only \"sales_team\" on Customer is supported.").format(
-					self.target_doctype, self.target_fieldname
+					doctype, fieldname
 				)
 			)
 
@@ -87,6 +100,52 @@ class CustomerWizardMapping(Document):
 			defaults += cint(row.is_default)
 		if defaults > 1:
 			frappe.throw(_("Only one answer can be the default."))
+
+	def validate_mapped_master_values(self):
+		"""A Fixed question's mapped_value/fallback_value are static config — a Link
+		pointed at a since-deleted record, or a Select value that isn't one of the
+		field's configured options, should never make it into a saved row. Caught
+		here instead of at submit time, where a Customer target only surfaces as an
+		unfixable customer_error and a CRM Lead target aborts the whole convert
+		before the Deal even exists."""
+		if self.question_type != "Fixed":
+			return
+		self._validate_mapped_values(self.target_doctype, self.target_fieldname, "mapped_value", check_fallback=True)
+		if self.secondary_target_doctype:
+			self._validate_mapped_values(
+				self.secondary_target_doctype, self.secondary_target_fieldname, "secondary_mapped_value"
+			)
+
+	def _validate_mapped_values(self, doctype, fieldname, option_fieldname, *, check_fallback=False):
+		if (doctype, fieldname) in SPECIAL_TARGETS:
+			return
+		field = frappe.get_meta(doctype).get_field(fieldname)
+		if not field or field.fieldtype not in ("Link", "Select"):
+			return
+
+		values = {row.get(option_fieldname) for row in self.options if row.get(option_fieldname)}
+		if check_fallback and self.fallback_value:
+			values.add(self.fallback_value)
+
+		if field.fieldtype == "Link":
+			for value in values:
+				if not frappe.db.exists(field.options, value):
+					frappe.throw(
+						_("{0}.{1}: {2} is not a valid {3}").format(
+							doctype, fieldname, frappe.bold(value), field.options
+						),
+						title=_("Unknown Master Record"),
+					)
+		else:  # Select
+			allowed = set((field.options or "").splitlines())
+			for value in values:
+				if value not in allowed:
+					frappe.throw(
+						_("{0}.{1}: {2} is not one of its allowed values").format(
+							doctype, fieldname, frappe.bold(value)
+						),
+						title=_("Invalid Select Value"),
+					)
 
 	def validate_dynamic_source(self):
 		if self.question_type != "Dynamic":
@@ -127,7 +186,6 @@ class CustomerWizardMapping(Document):
 				)
 			)
 
-		# guard against a dependency cycle
 		seen = {self.name}
 		node = parent
 		while node.depends_on_question:

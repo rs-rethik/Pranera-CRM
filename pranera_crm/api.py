@@ -13,37 +13,38 @@ from frappe import _
 from frappe.utils import cint
 
 from crm.fcrm.doctype.crm_fields_layout.crm_fields_layout import get_fields_layout
-from crm.fcrm.doctype.crm_lead.crm_lead import convert_to_deal
+from crm.fcrm.doctype.crm_lead.crm_lead import LEAD_DEAL_FIELD_MAP as CRM_LEAD_DEAL_FIELD_MAP
+from crm.fcrm.doctype.crm_lead.crm_lead import convert_to_deal, is_custom_field
+from pranera_crm import customer_wizard as cw
 from pranera_crm import erpnext_customer
 from pranera_crm.settings import is_erpnext_customer_enabled, is_wizard_enabled
+from pranera_crm.utils import field_meta
 
 LEAD = "CRM Lead"
 DEAL = "CRM Deal"
 ORGANIZATION = "CRM Organization"
 
-# The Lead fields CRM builds a *new* Organization / Contact from
-# (see CRMLead.create_organization / create_contact).
 ORGANIZATION_FIELDS = (
 	"organization",
 	"website",
-	"territory",
-	"industry",
 	"annual_revenue",
 	"no_of_employees",
 )
 CONTACT_FIELDS = (
-	"salutation",
 	"first_name",
 	"last_name",
-	"gender",
 	"job_title",
 	"email",
 	"phone",
 	"mobile_no",
 )
 
-# Deal keys the wizard must never let a client set: they are derived by CRM
-# from the lead / the org and contact chosen in the wizard.
+ORGANIZATION_QUESTION_LEAD_FIELDS = ("territory", "industry")
+CONTACT_QUESTION_LEAD_FIELDS = ("salutation", "gender")
+
+INDIVIDUAL_GATE_KEY = "customer_type"
+INDIVIDUAL_OPTION_VALUE = "individual"
+
 PROTECTED_DEAL_FIELDS = frozenset(
 	{
 		"name",
@@ -64,8 +65,7 @@ PROTECTED_DEAL_FIELDS = frozenset(
 	}
 )
 
-# Mirrors ConvertToDealModal.vue
-LEAD_DEAL_FIELD_MAP = {"deal_owner": "lead_owner"}
+LEAD_DEAL_FIELD_MAP = {deal_field: lead_field for lead_field, deal_field in CRM_LEAD_DEAL_FIELD_MAP.items()}
 SKIP_PREFILL_FIELDS = ("organization", "status")
 LAYOUT_FIELD_TYPES_TO_SKIP = ("Tab Break", "Section Break", "Column Break", "HTML", "Button", "Table")
 
@@ -81,11 +81,6 @@ class WizardDisabled(frappe.ValidationError):
 def _ensure_enabled():
 	if not is_wizard_enabled():
 		frappe.throw(_("The Convert to Deal wizard is turned off in CRM Settings."), WizardDisabled)
-
-
-# --------------------------------------------------------------------------- #
-# Context
-# --------------------------------------------------------------------------- #
 
 
 @frappe.whitelist()
@@ -116,7 +111,6 @@ def get_wizard_context(lead: str) -> dict:
 		if df.fieldtype not in frappe.model.no_value_fields and doc.get(df.fieldname) not in (None, "")
 	}
 	lead_data["name"] = doc.name
-	# lets the wizard tell a saved draft was made against an older version of the lead
 	lead_data["modified"] = str(doc.modified)
 	lead_data["lead_name"] = doc.lead_name or doc.first_name
 
@@ -139,8 +133,8 @@ def get_wizard_context(lead: str) -> dict:
 			phone=doc.phone,
 			mobile_no=doc.mobile_no,
 		),
-		"organization_fields": _field_meta(ORGANIZATION_FIELDS),
-		"contact_fields": _field_meta(CONTACT_FIELDS),
+		"organization_fields": field_meta(LEAD, ORGANIZATION_FIELDS),
+		"contact_fields": field_meta(LEAD, CONTACT_FIELDS),
 		"deal_layout": layout,
 		"deal_defaults": _deal_defaults(doc, layout_fields),
 		"deal_statuses": frappe.get_all(
@@ -182,8 +176,9 @@ def find_candidates(
 	contacts, auto_contact = _contact_candidates(email, phone, mobile_no)
 
 	auto_organization = None
-	if organization and frappe.db.exists(ORGANIZATION, {"organization_name": organization}):
-		auto_organization = frappe.db.get_value(ORGANIZATION, {"organization_name": organization}, "name")
+	if organization:
+		rows = frappe.get_list(ORGANIZATION, filters={"organization_name": organization}, pluck="name", limit=1)
+		auto_organization = rows[0] if rows else None
 
 	return {
 		"organizations": organizations,
@@ -193,17 +188,24 @@ def find_candidates(
 	}
 
 
+CANDIDATE_FETCH_LIMIT = 25
+CANDIDATE_DISPLAY_LIMIT = 10
+
+
 def _organization_candidates(organization, website):
 	names = {}
 
 	if organization:
+		needle = organization.strip().lower()
 		for row in frappe.get_list(
 			ORGANIZATION,
 			filters={"organization_name": ["like", f"%{organization.strip()}%"]},
 			fields=["name", "organization_name", "website", "industry", "territory"],
-			limit=10,
+			limit=CANDIDATE_FETCH_LIMIT,
 		):
-			exact = (row.organization_name or "").strip().lower() == organization.strip().lower()
+			if needle not in (row.organization_name or "").lower():
+				continue
+			exact = (row.organization_name or "").strip().lower() == needle
 			names[row.name] = {**row, "reason": "name", "exact": exact}
 
 	domain = _domain(website)
@@ -212,15 +214,17 @@ def _organization_candidates(organization, website):
 			ORGANIZATION,
 			filters={"website": ["like", f"%{domain}%"]},
 			fields=["name", "organization_name", "website", "industry", "territory"],
-			limit=10,
+			limit=CANDIDATE_FETCH_LIMIT,
 		):
+			if domain not in (row.website or "").lower():
+				continue
 			if row.name in names:
 				names[row.name]["reason"] = "name and website"
 			else:
 				names[row.name] = {**row, "reason": "website", "exact": False}
 
-	# exact matches first
-	return sorted(names.values(), key=lambda r: (not r["exact"], r["organization_name"] or ""))
+	candidates = sorted(names.values(), key=lambda r: (not r["exact"], r["organization_name"] or ""))
+	return candidates[:CANDIDATE_DISPLAY_LIMIT]
 
 
 def _contact_candidates(email, phone, mobile_no):
@@ -228,7 +232,6 @@ def _contact_candidates(email, phone, mobile_no):
 	parents: dict[str, str] = {}
 	auto_contact = None
 
-	# Same lookup order as CRMLead.contact_exists: email, then phone, then mobile.
 	lookups = (
 		("Contact Email", "email_id", email, "email"),
 		("Contact Phone", "phone", phone, "phone"),
@@ -268,11 +271,6 @@ def _domain(website):
 	return host or None
 
 
-# --------------------------------------------------------------------------- #
-# Convert
-# --------------------------------------------------------------------------- #
-
-
 @frappe.whitelist(methods=["POST"])
 def convert(
 	lead: str,
@@ -285,6 +283,7 @@ def convert(
 	contact_customer_answers: str | dict | None = None,
 	customer_address: str | dict | None = None,
 	customer_overrides: str | dict | None = None,
+	customer_existing_address: str | None = None,
 	confirm_duplicate_customer: bool = False,
 ) -> dict:
 	"""Convert ``lead`` into a Deal via CRM's ``convert_to_deal``, then (optionally)
@@ -292,6 +291,10 @@ def convert(
 
 	``lead_updates`` are applied to the Lead first (permission-checked) because CRM
 	builds a *new* Organization / Contact purely from the Lead's own fields.
+	If ``customer_answers`` answered "Individual" and no ``existing_organization``
+	was chosen, the organization fields are cleared regardless of what was sent —
+	an Individual never gets a CRM Organization (see
+	``_individual_customer_selected``).
 
 	The ERPNext Customer setup runs inside its own savepoint: a failure there rolls
 	back only the Customer/Address/Contact changes and is reported back, never the
@@ -311,24 +314,41 @@ def convert(
 	if not frappe.has_permission(LEAD, "write", lead):
 		frappe.throw(_("Not allowed to convert Lead to Deal"), frappe.PermissionError)
 
-	# Serialise concurrent submits (double tap, two tabs) so a lead can't be
-	# converted twice.
 	state = frappe.db.get_value(LEAD, lead, ["converted", "status"], as_dict=True, for_update=True)
 	_ensure_convertible(lead, state)
 
 	existing_contact = existing_contact or None
 	existing_organization = existing_organization or None
+	customer_existing_address = customer_existing_address or None
 	_validate_existing_record("Contact", existing_contact)
 	_validate_existing_record(ORGANIZATION, existing_organization)
+	_validate_existing_record("Address", customer_existing_address)
 
 	layout_fields = _flatten_layout(get_fields_layout(DEAL, "Required Fields"))
 	deal_values = _clean_deal(deal, layout_fields)
 
 	lead_doc = frappe.get_doc(LEAD, lead)
 	_check_required_deal_fields(lead_doc, layout_fields, deal_values)
+
+	include_bridge = bool(setup_customer) and is_erpnext_customer_enabled()
+	org_result = (
+		None
+		if existing_organization
+		else cw.resolve("Organization", _parse_dict(customer_answers), _parse_dict(customer_overrides), include_bridge_questions=include_bridge)
+	)
+	contact_result = (
+		None
+		if existing_contact
+		else cw.resolve("Contact", _parse_dict(contact_customer_answers), _parse_dict(customer_overrides), include_bridge_questions=include_bridge)
+	)
+
+	updates = _parse_dict(lead_updates)
+	updates.update(_resolve_lead_questions(org_result, contact_result))
+	if not existing_organization and _individual_customer_selected(customer_answers):
+		updates.update({"organization": "", "website": "", "annual_revenue": "", "no_of_employees": ""})
 	_apply_lead_updates(
 		lead_doc,
-		lead_updates,
+		updates,
 		skip_organization=bool(existing_organization),
 		skip_contact=bool(existing_contact),
 	)
@@ -350,6 +370,9 @@ def convert(
 				customer_address,
 				customer_overrides,
 				confirm_duplicate_customer,
+				customer_existing_address,
+				org_result=org_result,
+				contact_result=contact_result,
 			)
 		)
 	return response
@@ -362,6 +385,7 @@ def setup_customer_for_deal(
 	contact_customer_answers: str | dict | None = None,
 	customer_address: str | dict | None = None,
 	customer_overrides: str | dict | None = None,
+	customer_existing_address: str | None = None,
 	confirm_duplicate_customer: bool = False,
 ) -> dict:
 	"""Run (or retry) just the ERPNext Customer setup for an *already converted* deal.
@@ -379,7 +403,10 @@ def setup_customer_for_deal(
 	if not is_erpnext_customer_enabled():
 		frappe.throw(_("ERPNext integration is turned off in CRM Settings."))
 
-	existing = frappe.db.get_value(DEAL, deal, "erpnext_customer")
+	customer_existing_address = customer_existing_address or None
+	_validate_existing_record("Address", customer_existing_address)
+
+	existing = frappe.db.get_value(DEAL, deal, "erpnext_customer", for_update=True)
 	if existing and frappe.db.exists("Customer", existing):
 		return {"customer": existing, "customer_error": None, "duplicate_customer": None}
 
@@ -390,11 +417,21 @@ def setup_customer_for_deal(
 		customer_address,
 		customer_overrides,
 		confirm_duplicate_customer,
+		customer_existing_address,
 	)
 
 
 def _run_customer_setup(
-	deal_name, customer_answers, contact_customer_answers, customer_address, customer_overrides, confirm
+	deal_name,
+	customer_answers,
+	contact_customer_answers,
+	customer_address,
+	customer_overrides,
+	confirm,
+	existing_address=None,
+	*,
+	org_result=None,
+	contact_result=None,
 ) -> dict:
 	"""``{"customer": name | None, "customer_error": message | None, "duplicate_customer": name | None}``.
 
@@ -403,6 +440,11 @@ def _run_customer_setup(
 	conversion (already part of this same transaction) and everything before it
 	untouched — whether the request goes on to commit normally or, inside the
 	test runner, gets rolled back wholesale by the test's own transaction.
+
+	``org_result``/``contact_result``: already-resolved ``cw.resolve()`` output
+	from ``convert()``, when this runs in the same request right after it — see
+	the comment there. ``None`` (the standalone retry endpoint, a separate later
+	request) means ``erpnext_customer.create()`` resolves it itself, same as ever.
 	"""
 	result = {"customer": None, "customer_error": None, "duplicate_customer": None}
 	save_point = "pranera_customer_setup"
@@ -415,6 +457,9 @@ def _run_customer_setup(
 			address=_parse_dict(customer_address),
 			overrides=_parse_dict(customer_overrides),
 			confirm_duplicate=cint(confirm),
+			existing_address=existing_address,
+			org_result=org_result,
+			contact_result=contact_result,
 		)
 	except erpnext_customer.DuplicateCustomerName as e:
 		frappe.db.rollback(save_point=save_point)
@@ -498,8 +543,10 @@ def _apply_lead_updates(lead_doc, lead_updates, skip_organization, skip_contact)
 	allowed = set()
 	if not skip_organization:
 		allowed.update(ORGANIZATION_FIELDS)
+		allowed.update(ORGANIZATION_QUESTION_LEAD_FIELDS)
 	if not skip_contact:
 		allowed.update(CONTACT_FIELDS)
+		allowed.update(CONTACT_QUESTION_LEAD_FIELDS)
 
 	changes = {}
 	for fieldname, value in updates.items():
@@ -513,13 +560,34 @@ def _apply_lead_updates(lead_doc, lead_updates, skip_organization, skip_contact)
 		return
 
 	lead_doc.update(changes)
-	# save() enforces write permission and runs CRM's own validations
 	lead_doc.save()
 
 
-# --------------------------------------------------------------------------- #
-# Helpers
-# --------------------------------------------------------------------------- #
+def _resolve_lead_questions(org_result: dict | None, contact_result: dict | None) -> dict:
+	"""CRM-Lead-targeted values (Territory, Industry, Salutation, Gender, ...) out
+	of already-resolved ``cw.resolve()`` results — applied to the Lead *before*
+	``convert_to_deal`` so CRM's own ``create_organization``/``create_contact``
+	(which read straight off the Lead) build the new Organization/Contact from
+	them. ``None`` for a scope (an existing org/contact was picked) means there's
+	nothing here to set, same as ``_apply_lead_updates`` skipping it.
+	"""
+	updates: dict = {}
+	if org_result:
+		updates.update(org_result["fields"].get("CRM Lead", {}))
+	if contact_result:
+		updates.update(contact_result["fields"].get("CRM Lead", {}))
+	return updates
+
+
+def _individual_customer_selected(customer_answers) -> bool:
+	"""True when the raw (unresolved) ``customer_answers`` answered the well-known
+	``INDIVIDUAL_GATE_KEY`` question with ``INDIVIDUAL_OPTION_VALUE`` — checked
+	against the raw answer, not a resolved value, so this works even when the
+	ERPNext bridge is off (the question still applies, see ``requires_erpnext_
+	bridge`` on the seeded row). A renamed/removed/differently-answered question
+	simply means this returns ``False``, same non-breaking fallback as the
+	frontend's own ``GST_GATE_KEY`` special-casing."""
+	return _parse_dict(customer_answers).get(INDIVIDUAL_GATE_KEY) == INDIVIDUAL_OPTION_VALUE
 
 
 def _get_lead_for_read(lead):
@@ -543,25 +611,6 @@ def _flatten_layout(tabs) -> list:
 					if isinstance(field, dict) and field.get("fieldtype") not in LAYOUT_FIELD_TYPES_TO_SKIP:
 						fields.append(frappe._dict(field))
 	return fields
-
-
-def _field_meta(fieldnames):
-	meta = frappe.get_meta(LEAD)
-	out = []
-	for fieldname in fieldnames:
-		df = meta.get_field(fieldname)
-		if not df:
-			continue
-		out.append(
-			{
-				"fieldname": df.fieldname,
-				"label": _(df.label),
-				"fieldtype": df.fieldtype,
-				"options": df.options,
-				"reqd": cint(df.reqd),
-			}
-		)
-	return out
 
 
 def _deal_defaults(lead_doc, layout_fields) -> dict:
@@ -589,22 +638,18 @@ def _deal_defaults(lead_doc, layout_fields) -> dict:
 	return defaults
 
 
-def _is_custom(field) -> bool:
-	fieldname = field.get("fieldname") or ""
-	return bool(
-		field.get("is_custom_field")
-		or field.get("custom")
-		or fieldname.startswith("custom_")
-		or (field.get("name") and field.get("name") == f"{field.get('parent')}-{fieldname}")
-	)
-
-
 def _matching_custom_lead_field(lead_meta, deal_field):
-	if not _is_custom(deal_field):
+	"""The inverse of CRM's own ``get_matching_custom_deal_field``: given a *Deal*
+	field, find the *Lead* field it was built from. Mirrors CRM's matching rule
+	exactly (only the field being matched *to* has to be custom — a custom Deal
+	field can match a standard Lead field with the same label/fieldtype) via the
+	shared ``is_custom_field``, so this can't quietly diverge from what
+	``convert_to_deal`` actually copies."""
+	if not is_custom_field(deal_field):
 		return None
 	matches = [
 		lf.fieldname
 		for lf in lead_meta.fields
-		if _is_custom(lf) and lf.label == deal_field.get("label") and lf.fieldtype == deal_field.get("fieldtype")
+		if lf.label == deal_field.get("label") and lf.fieldtype == deal_field.get("fieldtype")
 	]
 	return matches[0] if len(matches) == 1 else None

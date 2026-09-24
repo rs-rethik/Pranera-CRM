@@ -11,10 +11,14 @@
   "scope",
   "enabled",
   "is_mandatory",
+  "requires_erpnext_bridge",
   "column_break_basic",
   "target_doctype",
   "target_fieldname",
   "question_type",
+  "section_break_secondary_target",
+  "secondary_target_doctype",
+  "secondary_target_fieldname",
   "section_break_options",
   "options",
   "section_break_dynamic",
@@ -70,6 +74,13 @@
   },
   {
    "default": "1",
+   "description": "On: only asked/resolved when the ERPNext Customer bridge is enabled (the usual case — this question targets Customer/Address/Contact). Off: always asked/resolved regardless of the bridge, e.g. Territory or Industry, which apply to the CRM Lead/Organization either way.",
+   "fieldname": "requires_erpnext_bridge",
+   "fieldtype": "Check",
+   "label": "Requires ERPNext Bridge"
+  },
+  {
+   "default": "1",
    "fieldname": "enabled",
    "fieldtype": "Check",
    "in_list_view": 1,
@@ -84,7 +95,7 @@
    "fieldname": "target_doctype",
    "fieldtype": "Select",
    "label": "Target Doctype",
-   "options": "Customer\nAddress\nContact",
+   "options": "Customer\nAddress\nContact\nCRM Lead",
    "reqd": 1
   },
   {
@@ -102,6 +113,26 @@
    "label": "Question Type",
    "options": "Fixed\nDynamic",
    "reqd": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "section_break_secondary_target",
+   "fieldtype": "Section Break",
+   "label": "Secondary Target (optional)"
+  },
+  {
+   "description": "Also write this question's resolved answer onto a second field, e.g. Territory feeding both the CRM Organization and the ERPNext Customer. Each answer below then needs its own Secondary Assigned Value.",
+   "fieldname": "secondary_target_doctype",
+   "fieldtype": "Select",
+   "label": "Secondary Target Doctype",
+   "options": "\nCustomer\nAddress\nContact\nCRM Lead"
+  },
+  {
+   "depends_on": "eval:doc.secondary_target_doctype",
+   "description": "Fieldname on the Secondary Target Doctype.",
+   "fieldname": "secondary_target_fieldname",
+   "fieldtype": "Data",
+   "label": "Secondary Target Fieldname"
   },
   {
    "collapsible": 1,
@@ -234,16 +265,11 @@
    "write": 1
   },
   {
-   "create": 1,
-   "delete": 1,
    "email": 1,
-   "export": 1,
    "print": 1,
    "read": 1,
    "report": 1,
-   "role": "Sales Manager",
-   "share": 1,
-   "write": 1
+   "role": "Sales Manager"
   },
   {
    "email": 1,

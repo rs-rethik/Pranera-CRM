@@ -2,10 +2,12 @@
 
 A full-page, step-by-step **Convert to Deal** wizard for [Frappe CRM](https://github.com/frappe/crm),
 installable as a PWA, that can also set up the matching **ERPNext Customer/Address/Contact** —
-every ERPNext link field (Customer Group, Territory, GST Category, Payment Terms, Sales Person, …) is
-chosen through a plain-language question rather than picked from a raw master record, using an
-admin-configurable mapping (`Customer Wizard Mapping`), never hardcoded. It lives entirely in this app;
-nothing under `apps/crm` is modified. Requires **erpnext** and **crm**.
+every ERPNext link field (Customer Group, Territory, GST Category, Payment Terms, …) is chosen through a
+plain-language question rather than picked from a raw master record, using an admin-configurable mapping
+(`Customer Wizard Mapping`), never hardcoded — except where a field's answer is already implied by
+something the wizard already knows (Sales Person: see below), which is filled in automatically instead
+of asking. It lives entirely in this app; nothing under `apps/crm` is modified. Requires **erpnext** and
+**crm**.
 
 * Route: `/deal_wizard/<lead>` (`?step=1..4`); `/deal_wizard/` lists open leads and local drafts.
 * Steps: **1 Organization** (use existing / create new, + the ERPNext Customer/Address questions) →
@@ -86,7 +88,7 @@ yarn dev       # Vite dev server on port 8082 (webserver_port 8002 + 80), proxyi
 
 | Method | Purpose |
 | --- | --- |
-| `get_wizard_context(lead)` | Read permission check; returns lead prefill data, candidate Organizations (name/website) and Contacts (email/phone/mobile), which of them CRM would silently reuse (`auto_organization`, `auto_contact`), the Deal quick-entry layout (`get_fields_layout("CRM Deal", "Required Fields")`), lead→deal defaults, deal statuses, `converted` / `lost` / `can_write`, and `customer` (the ERPNext Customer section context — see below). |
+| `get_wizard_context(lead)` | Read permission check; returns lead prefill data, candidate Organizations (name/website) and Contacts (email/phone/mobile), which of them CRM would silently reuse (`auto_organization`, `auto_contact` — both permission-filtered: a user who can't read the matched record never learns it exists), the Deal quick-entry layout (`get_fields_layout("CRM Deal", "Required Fields")`), lead→deal defaults, deal statuses, `converted` / `lost` / `can_write`, and `customer` (the ERPNext Customer section context — see below). |
 | `search_candidates(lead, …)` | Re-runs the matching for values the user edited. |
 | `convert(lead, deal, existing_contact, existing_organization, lead_updates, setup_customer, customer_answers, contact_customer_answers, customer_address, customer_overrides, confirm_duplicate_customer)` | POST only. Checks write permission, locks the lead row, rejects already-converted (`LeadAlreadyConverted`) and Lost leads, validates existing records are readable, whitelists the deal payload to the quick-entry layout fields (never `lead`, `contacts`, `organization`, `owner`, …), checks required deal fields, applies `lead_updates`, then calls CRM's `convert_to_deal`. If `setup_customer` and the ERPNext bridge is on, also runs the Customer step (see below). Returns `{"deal": name, "customer": name \| None, "customer_error": message \| None, "duplicate_customer": name \| None}`. |
 | `setup_customer_for_deal(deal, …)` | POST only. Runs (or retries) *just* the ERPNext Customer step for an already-converted deal — used after `convert` reports `duplicate_customer` or `customer_error`, so the Deal is never re-converted. Idempotent: if the deal already has a linked Customer, returns it without redoing anything. |
@@ -94,8 +96,10 @@ yarn dev       # Vite dev server on port 8082 (webserver_port 8002 + 80), proxyi
 | `whoami()` | Guest-callable; lets the SPA tell an expired session from a genuine 403. |
 
 `pranera_crm/erpnext_customer.py` additionally exposes `lookup_gstin(gstin)` (fetches a business name + address
-from the GST public search via India Compliance, for the *Fetch* button) and `refresh_questions(scope, answers)`
-(re-resolves a Dynamic question's live options as other answers change).
+from the GST public search via India Compliance, for the *Fetch* button — cached by GSTIN for 24h, since a
+GSTIN's registered business data doesn't change minute to minute, and rate-limited to 20 lookups per 5 minutes
+per user/IP so this whitelisted endpoint can't be used to probe an unbounded list of GSTINs) and
+`refresh_questions(scope, answers)` (re-resolves a Dynamic question's live options as other answers change).
 
 **Why `lead_updates`?** `convert_to_deal` builds a *new* Organization/Contact purely from the Lead's own
 fields and accepts nothing else. So when the user chooses "Create new" and edits the values in steps 1-2,
@@ -162,6 +166,10 @@ appearing as an extra section in the Organization/Contact steps whenever *ERPNex
 is on (the toggle CRM itself already ships — no new switch of ours). Every ERPNext link field is chosen
 through a plain-language question; nothing is hardcoded.
 
+This extends to the **CRM-level** Link fields too — Territory and Industry (Organization step),
+Salutation and Gender (Contact step) — so *no* Link field anywhere on these two steps is a raw record
+search, whether or not the ERPNext bridge is even installed (see `requires_erpnext_bridge` below).
+
 ### Why not just use CRM's own ERPNext bridge?
 
 CRM ships `ERPNext CRM Settings` / `create_customer_from_deal`, which delegates to
@@ -176,12 +184,19 @@ creation keep working unchanged — CRM's bridge itself is never modified or dis
 ### `Customer Wizard Mapping` — the question ↔ value config
 
 A doctype (`/app/customer-wizard-mapping`), not a fixture-only concept — admins add, edit or disable
-questions from the Desk like any other list. Each row is one question:
+questions from the Desk like any other list. Each row is one question. **Only System Manager can create,
+edit or delete these rows** — Sales Manager and Sales User are read-only, same as any other doctype's
+admin-configured business rules: these rows control what gets written onto ERPNext Customers (customer
+groups, GST categories, sales-team members), so letting a sales role redirect that on their own (e.g.
+adding a mapping that assigns themselves as Sales Person on every new Customer) would bypass admin
+oversight of that data flow.
 
 | Field | Meaning |
 | --- | --- |
 | `scope` | `Organization` or `Contact` — which wizard step it renders in. |
-| `target_doctype` / `target_fieldname` | Which field the answer is written to (e.g. `Address.gst_category`). Checked against real doctype metadata on save; `Customer.sales_team` is special-cased (see below). |
+| `target_doctype` / `target_fieldname` | Which field the answer is written to (e.g. `Address.gst_category`, or `CRM Lead.territory` — see below). Checked against real doctype metadata on save; `Customer.sales_team` is special-cased (see below). |
+| `requires_erpnext_bridge` | On (default): only asked/resolved when the ERPNext bridge is enabled for this conversion — the usual case for a question targeting Customer/Address/Contact. Off: always asked/resolved regardless — used for `CRM Lead`-targeted questions (Territory, Industry, Salutation, Gender), which apply either way. |
+| `secondary_target_doctype` / `secondary_target_fieldname` | Optional: also write this question's resolved answer onto a *second* field (each `Answers` row then needs its own `Secondary Assigned Value`). Used by exactly two shipped rows — see *Territory* and *Tax Category* below. |
 | `question_type` | **Fixed**: a curated list of answers you define (child table `options`, each with a business-friendly `option_label` and the `mapped_value` actually written — leave `mapped_value` blank for an answer that only triggers a follow-up, see *overlay* below). **Dynamic**: a live, filtered list of records from another doctype (e.g. enabled Sales Persons) — still a picked list, never a raw search box. |
 | `depends_on_question` / `depends_on_option` / `depends_on_operator` | Branching: this question only appears once the named question was answered a particular way. `Is` (default) matches one answer; `Is not` shows the question for every *other* answer (e.g. an Overseas category for every country except India). An unanswered parent hides the question either way. |
 | `fallback_value` | Used, and flagged on the Review step, when the user's path leaves this field unanswered. |
@@ -189,19 +204,75 @@ questions from the Desk like any other list. Each row is one question:
 | `sequence` | Resolution/display order. Two questions targeting the *same* field combine by **overlay**: later ones win, but only when their chosen answer actually has a `mapped_value` — this is how "Regular or Composition?" and "Is it an SEZ unit?" (both writing `gst_category`) combine without a multi-answer combinator. |
 | `override_roles` | Roles (one per line) allowed to override the resolved value on the Review step; everyone else sees a read-only result. |
 
+**Territory, a worked example of the secondary target**: "Where is the customer located?" is asked once,
+but two different Link fields on two different doctypes need an answer from it — `CRM Lead.territory`
+(a **CRM Territory** record, feeding the new CRM Organization regardless of the ERPNext bridge — see
+`CRMLead.create_organization`) and, when the bridge is on, `Customer.territory` (a **Territory** record,
+ERPNext's own, separate doctype). The shipped `territory` row targets `CRM Lead.territory` primarily and
+`Customer.territory` as its secondary target, with matching `India`/`Rest Of The World` values on both — two
+`CRM Territory` records **and** their ERPNext `Territory` counterparts, seeded once by `setup.ensure_territories()`
+(a fresh CRM install ships neither; ERPNext's own `Territory` only gets them from the setup wizard if the
+site's country was India, so this seeds it regardless, avoiding an unfixable Link-validation error the first
+time this question resolves to "India" on a non-India-setup-wizard site). **Tax Category** works the same way, on the existing `gst_registration_type` row:
+"Composition" resolves `Customer.tax_category` to the existing `Registered Composition` Tax Category record
+(from `india_compliance`); "Regular" deliberately resolves nothing — telling In-State from Out-State needs a
+same-state-as-us comparison the wizard doesn't currently ask, so it's left for you to answer directly on the
+Customer rather than risk assigning the wrong one.
+
 Resolution (`pranera_crm/customer_wizard.py:resolve`) always runs **server-side** at submit time from the raw
 answers — a tampered client payload can change which *answer* was picked, never what value that answer maps
 to. The frontend (`frontend/src/lib/questions.js`) mirrors the same rules for instant UI feedback (visibility,
 a live Review preview with the actual resolved values, grouped by Customer/Address/Contact) but is never
 trusted.
 
-**Shipped questions** (`pranera_crm/fixtures/customer_wizard_mapping.json`, freely editable): Customer Type,
-Customer Group, Territory, Currency, Payment Terms (pre-answered from a seeded `100% Advance` template — see
-`setup.py`), Address Type, GST Registered? → Regular/Composition → SEZ?, and Sales Person (Dynamic, filtered
-to `enabled=1, is_group=0`; ships with no Sales Person records, so the question is skipped with nothing
-assigned until you add some) for Organization; Designation for Contact. These use the real Customer
-Group/Territory records already on a fresh ERPNext install — add finer ones (e.g. per-state Territories) and
-point new answers at them with no code change.
+**Shipped questions** (`pranera_crm/data/customer_wizard_mapping_seed.json`, freely editable) — Organization:
+Customer Type (`requires_erpnext_bridge` off — see *Individual vs Business* below), Territory and Industry
+(`requires_erpnext_bridge` off — Territory also feeds `Customer.territory`, see above; Industry is Dynamic,
+sourced from `CRM Industry`), Customer Group, Currency, Payment Terms (pre-answered from a seeded `100%
+Advance` template — see `setup.py`), Address Type, and GST Registered? → Regular/Composition → SEZ?
+(Composition also feeds `Customer.tax_category`, see above). Contact: Salutation and Gender
+(`requires_erpnext_bridge` off) and Designation. These use the real Customer Group/Territory/Salutation/
+Gender records already on a fresh ERPNext install — add finer ones (e.g. per-state Territories) and point
+new answers at them with no code change.
+
+**Seeded once, not re-synced**: these rows are deliberately *not* a Frappe fixture — `setup.
+ensure_customer_wizard_questions()` inserts each shipped row only if a row with that `name` doesn't already
+exist, on every install/migrate, and never touches one that's already there. (A fixture would re-import and
+overwrite on every `migrate` regardless of `hooks.py`'s `fixtures` filters — `frappe.utils.fixtures.
+import_fixtures` scans every `.json` file physically under `fixtures/` and force-reinserts each row from the
+file's content unconditionally; those filters are only ever read by `bench export-fixtures`, never by import.
+Seeding from `pranera_crm/data/` instead, outside `fixtures/` entirely, is what actually makes "edit, disable
+or add to these freely" true.) Deleting a row entirely is *not* undone — only a missing `name` gets reseeded.
+
+### Sales Person — auto-assigned, not asked
+
+"Who handles this customer?" used to be a seeded Dynamic question; it isn't one anymore — the wizard already
+knows who's converting the lead, so asking was redundant. `erpnext_customer._session_sales_person` follows
+the standard ERPNext link (`User` → `Employee.user_id` → `Sales Person.employee`) for the acting
+`frappe.session.user` and, if it resolves to an enabled Sales Person, adds it to the new (or existing)
+Customer's Sales Team — same `_apply_sales_team` helper a question-driven one would have used, so nothing
+about the `Customer.sales_team` special-case (`SALES_TEAM_TARGET` in `customer_wizard.py`) went away, only
+the seeded question that used to drive it. No match (e.g. Administrator, or any user with no Employee/Sales
+Person record) means nothing is added — same as leaving the old question unanswered. An admin who wants it
+askable again (e.g. to let a manager assign a *different* Sales Person than themselves) can still add a
+`Customer Wizard Mapping` row targeting `Customer.sales_team` — the mechanism is unchanged, just unseeded.
+
+### Individual vs Business — no Organization for a person
+
+"Is this customer a registered business or an individual?" (the seeded `customer_type` question) is the
+**first** thing the Organization step asks (`requires_erpnext_bridge` off, like Territory/Industry — this
+has to apply whether or not the ERPNext bridge is on, since it's a CRM-level decision, not an ERPNext one).
+**Individual** hides the organization name/website/revenue/employees fields entirely for the rest of the
+step — nothing is lost, there was never anywhere for them to go: `CRMLead.create_organization()` already
+skips creating a CRM Organization once the Lead's `organization` field is empty, and
+`erpnext_customer.create()`'s Customer naming already falls back to the primary Contact's full name when
+there's no Organization. The wizard just needed to connect the answer to actually clearing those fields:
+`api.convert()`'s `_individual_customer_selected()` (a well-known key/answer, same pattern as GST's
+`GST_GATE_KEY`) forces the organization fields blank in `lead_updates` server-side — regardless of what the
+client sends, so a stale draft or a tampered payload can't sneak an Organization in for a person. Picking an
+*existing* organization overrides this (an explicit choice wins). Territory/Industry and the rest of the
+ERPNext section still apply to an individual customer; GST is still asked either way (a freelancer or
+proprietor can be GST-registered too) — right after this question, not instead of it.
 
 ### GST (via India Compliance)
 
@@ -216,10 +287,25 @@ free-text `state` on Address that becomes an Autocomplete once India Compliance 
 * **GSTIN**: validated via India Compliance's own `validate_gstin` (checksum) and `validate_gst_category`
   (e.g. a "Registered Regular" category needs an actual GSTIN) if the app is installed, else a regex format
   check as a fallback. A GSTIN already used by a *different* Customer's address is blocked as a likely
-  duplicate entry (confirm through the *Duplicate customer* flow below if it's intentional).
-* **"Fetch" button**: next to the GSTIN field, calls `lookup_gstin` (India Compliance's public GST search) and
-  fills in the organization name and address fields that are still empty — never overwrites something you've
-  already typed, and the server re-validates everything at submit regardless of where it came from.
+  duplicate entry (confirm through the *Duplicate customer* flow below if it's intentional). Also enforced
+  client-side (`validation.js`): once "Does the customer have a GST Number?" is **Yes**, the GSTIN field is
+  required before *Next* — catching the empty case before submit instead of only in the retry panel.
+* **GST comes right after Individual/Business, and gates the rest of the step**: when creating a new
+  organization, "Does the customer have a GST Number?" (the seeded `gst_registered` question) is the second
+  question the Organization step asks (after Individual/Business, see above) — the organization's name,
+  Territory/Industry, the ERPNext section and the Address all stay hidden until *both* are answered. **Yes**
+  reveals the GSTIN field and a **Fetch** button right there, which calls
+  `lookup_gstin` (India Compliance's public GST search) and fills in the organization name and address fields
+  once the rest of the step unlocks — never overwrites something you've already typed — plus the GST
+  follow-ups (Regular/Composition, SEZ). **No** (or **Outside India**) unlocks the rest of the step
+  immediately, empty, for manual entry — no GSTIN prompt anywhere. The server re-validates everything at
+  submit regardless of where it came from. This is a *frontend-only* layout decision (`OrganizationStep.vue`):
+  it special-cases the well-known `gst_registered` question_key (and its dependents, found generically via
+  `lib/questions.js`'s `descendantKeys`, so any follow-up an admin adds later is swept in automatically) to
+  render it right after the Individual/Business gate and hold everything else back until it's answered too;
+  if that question is renamed or removed, the step just falls back to unlocking as soon as Individual/
+  Business is answered, same as before this existed. Only applies to *new* organizations — picking an
+  existing one skips it, since there's no name/address left to fetch into.
 * If India Compliance isn't installed, the GST question/fields simply don't exist on Address/Customer and any
   mapping row targeting `gst_category`/`gstin` fails its own `validate_target_field` check — remove or disable
   those seeded questions on a non-Indian deployment.
@@ -236,14 +322,93 @@ hatch. This is deliberately *not* one all-encompassing rollback: the original br
 was written for a standalone Customer-only wizard, and treating a secondary ERPNext hiccup as fatal to the
 primary CRM action would be worse, not safer.
 
+**The wizard is the only place a Customer gets created from a Deal.** CRM ships its own, separate
+`ERPNext CRM Settings.create_customer_on_status_change` switch, wired to `CRM Deal.on_update`, that creates a
+Customer with no check for one the wizard already made. `setup.ensure_erpnext_customer_sync_disabled()`
+defaults that switch off, once (same never-fight-an-admin's-later-choice pattern as the wizard's own enable
+switch above), so the two paths don't race. As a safety net in case an admin turns it back on anyway,
+`erpnext_customer.create()` also checks for a Customer already cross-linked to the Deal
+(`_already_linked_customer`, mirroring CRM's own `get_local_customer`) before its name-based duplicate check —
+so a race *reuses* the Customer CRM's own sync already created instead of erroring or creating a second one.
+
 **Duplicate customer name**: an exact `customer_name` match raises for confirmation (`duplicate_customer` in
 the response) rather than silently creating a second record or silently overwriting the existing one — the
 wizard offers **Use existing customer**, which resubmits with `confirm_duplicate_customer=True` and *links*
 the Deal to that Customer instead of creating a new one.
 
-**Reuse, not duplication**: the Contact already created by the wizard's own Contact step gets a second
-Dynamic Link row for the new Customer (not a duplicate Contact); the CRM Organization's existing `address`,
-if any, is reused the same way and back-filled onto the Organization if it had none.
+**Reuse, not duplication, for the Contact**: the Contact already created by the wizard's own Contact step gets
+a second Dynamic Link row for the new Customer (not a duplicate Contact).
+
+**The Organization's existing Address is only reused when you didn't type a new one.** If the CRM Organization
+already has an `address` and the Address block's manual fields are left blank (or only resolved question
+fields like Address Type/GST Category apply to it), that existing Address is updated in place — same as
+before. But typing new address input (any of `address_line1`/`address_line2`/`city`/`state`/`pincode`) while
+the Organization already has an Address creates a **new** Address instead of silently overwriting the old
+one — the only way to intentionally edit an already-linked Address is **Choose Existing Address** (below),
+not by typing over it. This is a deliberate reversal from this feature's first version, which mutated the
+existing Address in place on any manual input — that made "add a second billing address for this
+organization" indistinguishable from "fix a typo in the existing one," silently discarding the old address's
+data either way.
+
+**"Choose Existing" shows an actual list, not just a blank search box**: the Organization and Contact steps'
+`find_candidates`/`_organization_candidates`/`_contact_candidates` (`pranera_crm/api.py`) already compute the
+full set of likely matches (by exact name/website for Organization, by email/phone/mobile for Contact), not
+just the single best one CRM would silently reuse — `candidates.organizations`/`candidates.contacts` in the
+wizard context. Checking "Choose Existing" renders those as a clickable list (`frontend/src/components/
+CandidateList.vue`, a small generic "list of records, pick one, show the match reason" component reused by
+both steps with a scoped slot for each step's own row format) above the existing type-to-search `Link` field,
+which stays as the "none of these" fallback — it isn't hidden behind another toggle. Picking from the list or
+typing into the search field both just set the same `org.existing`/`contact.existing`, so validation and
+submission don't know or care which one was used. The Organization name/website match is permission-filtered
+in Python after fetching (`_organization_candidates`) rather than escaped at the SQL level: Frappe's own
+`get_list`/`DatabaseQuery` filter pipeline doubles `%`/`\` twice over (once to survive its own internal
+%-format pass, once more in `frappe.db.escape()`) — always an *even* number of backslashes in the final
+query, which can never produce the single (odd) backslash MySQL's LIKE needs to treat a literal `%`/`_` as
+non-wildcard. So a `%`/`_` typed into the search box (e.g. "100% Corp") can't be neutralized at the SQL
+layer; instead the (still permission-filtered) LIKE match is fetched a little wider than displayed, and any
+row that doesn't genuinely contain the typed text is dropped before it reaches the client.
+
+**Address gets its own "Choose Existing" too**: unlike Organization/Contact, there's no "likely match" concept
+for an address (nothing on the Lead to match it by), so this is a plain search picker (`Link doctype="Address"`),
+not a `CandidateList`. `form.customer.address` is `{mode, existing, values}` — the same shape Organization/
+Contact already use — and the "Set up this customer in ERPNext" section's Address block swaps between the
+manual fields grid and this picker the same way the other two steps already do. Picking an existing Address
+skips creating a new one entirely: `erpnext_customer._upsert_address()` loads it, still applies the resolved
+Address-scope question fields (address type, GST category, ...) the same way reusing the Organization's own
+address already did, links it to the Customer *and* the CRM Organization (`_append_link_if_missing`, idempotent
+— safe to call whether or not it's already linked, and appended in the same save as the field updates above —
+see "One save per record" below), and back-fills `CRM Organization.address` if it had none. Validated
+server-side the same way as `existing_organization`/`existing_contact` (`_validate_existing_record`), threaded
+through `convert()`/`setup_customer_for_deal()` as `customer_existing_address`.
+
+**New Customers are created disabled** (`Customer.disabled = 1`) — the answers behind it (GST, Territory,
+Customer Group, ...) came from whoever ran the wizard, not a verification step, so it needs a human to
+enable it before it's usable in a transaction. Reusing an *existing* Customer (a name match, confirmed or
+retried) never touches this flag either way.
+
+**One `cw.resolve()` per scope, one save per record**: `api.convert()` resolves the Organization/Contact
+scopes once and passes the result into both the Lead-field prefill (`_resolve_lead_questions`) and
+`erpnext_customer.create()` — the two used to independently resolve the same answers a second time.
+`create()` also inserts the Customer *before* touching Address/Contact (instead of after), so their own
+Dynamic Link back to the Customer can be appended in the same save as their field updates
+(`_append_link_if_missing`) rather than a separate reload-and-resave pass; the one case that can't know
+the Customer's name early enough (a brand-new Address, not yet inserted either) backfills
+`Customer.customer_primary_address` with a plain single-field `frappe.db.set_value` afterward instead of a
+second full save. `setup_customer_for_deal`'s standalone retry (a separate, later request) still resolves
+fresh either way — there's nothing from an earlier request to reuse there.
+
+**A mapped Link/Select value is checked against real records at save time**, not just at submit time —
+`CustomerWizardMapping.validate_mapped_master_values()` rejects a `mapped_value`/`fallback_value`/
+`secondary_mapped_value` that doesn't exist (Link) or isn't one of the field's configured choices
+(Select) when the *mapping row* is saved. Without this, a typo or a since-deleted master record (an
+admin removes a Territory, say) only surfaced later — an unfixable `customer_error` for a Customer-scoped
+field, or a raw `LinkValidationError` that aborted the whole convert before the Deal even existed for a
+CRM-Lead-scoped one.
+
+**An empty-string answer is treated as unanswered**, not rejected — `cw.resolve()` only ever saw `""` from
+a hand-crafted or stale API payload (the wizard's own client-side `cleaned()` drops empty values before
+sending), but previously threw "is not one of the available answers" instead of falling through to the
+question's default/fallback the way a genuinely missing answer does.
 
 ## Site properties (theme, language, formats)
 
@@ -294,8 +459,13 @@ later `migrate`. (Frappe stores an untouched checkbox as `0` once the settings a
 * The action uses CRM's default custom-action button style (a Form Script cannot restyle it).
 
 The script is not marked *Standard*, so admins can edit or disable it (disabling it and reloading restores CRM's
-button). The fixture is re-synced on every `migrate`. Because the hiding relies on CRM's current markup, re-check
-it after CRM upgrades. If it ever stops matching, the stock button simply reappears (nothing breaks).
+button). The fixture's *content* is re-synced on every `migrate` (so it keeps tracking future pranera_crm
+releases), but an admin's `enabled` choice specifically is preserved across that resync: `setup.before_migrate()`
+captures it before fixture sync runs and `restore_form_script_enabled_state()` (in `after_migrate`) puts it back
+— without this, fixture sync would silently re-enable a script an admin had deliberately turned off, the same
+way it used to silently wipe edited `Customer Wizard Mapping` rows (see above). Because the hiding relies on
+CRM's current markup, re-check it after CRM upgrades. If it ever stops matching, the stock button simply
+reappears (nothing breaks).
 
 The bulk *Convert to Deal* on the Leads list is not affected.
 
@@ -328,27 +498,68 @@ Python tests, all rolled back automatically at the end of each test:
 * `test_api.py` — permission denied, already converted (flag and deal), new org + new contact (with
   `lead_updates`), existing org + existing contact (edits ignored, nothing duplicated), Lost leads, deal
   payload whitelisting, missing required deal fields, unknown existing records, context
-  permissions/candidates, and `whoami`.
+  permissions/candidates, `whoami`, `TestLeadQuestionResolution` — a question-driven answer applied to a
+  *new* organization/contact, skipped for an *existing* one, still applied when ERPNext setup is declined, and
+  a bridge-only mandatory question not blocking a declined setup — and `TestIndividualCustomerSkipsOrganization`
+  — an "individual" answer overriding a client-sent organization name (no Organization created, the Lead's own
+  `organization` field cleared), "company"/no-answer controls behaving as before, an explicit
+  `existing_organization` overriding the individual answer, and the resulting Customer named after the
+  Contact. Also `auto_organization` staying `None` for a user who can't read the matched CRM Organization
+  (via a **User Permission** restriction — resolving normally without one) and a literal `%`/`_` in a
+  candidate search not widening the match.
 * `test_customer_wizard.py` — the resolution engine directly: fixed/single-option auto-answer, fallback,
   branching (`Is` / `Is not`, hidden grandchildren), the sequential overlay, Dynamic options + filter
-  interpolation, the `sales_team` special case, role-gated override, `is_mandatory` blocking, and every
+  interpolation, the `sales_team` special case, role-gated override, `is_mandatory` blocking,
+  `TestBridgeAwareness` (`include_bridge_questions` excludes/includes the right questions and mandatory
+  checks), `TestSecondaryTarget` (a Fixed answer written onto both its primary and secondary target, skipped
+  on the secondary when an option has no secondary value, and skipped on the secondary when the answer was
+  overridden), `TestDisabledQuestionVisibility` (a disabled question, and a disabled *parent*, both resolve to
+  nothing server-side, not just hidden client-side), `TestDynamicSourceUnreadable` (a Dynamic question whose
+  `source_doctype` the acting user can't read degrades to no options instead of raising), and every
   `Customer Wizard Mapping.validate()` rule (unknown target field, table targets, duplicate/missing options,
-  bad Dynamic source, branching cycles/cross-scope, unknown override roles). Tests that call `resolve()`
-  first disable the seeded fixture questions (`isolate_from_seed_questions`) so they only see their own
-  ad-hoc ones.
+  bad Dynamic source, branching cycles/cross-scope, unknown override roles, secondary-target
+  pairing/field-existence, and a `mapped_value`/`fallback_value`/`secondary_mapped_value` pointed at a
+  missing Link record or an invalid Select value — each rejected at save time, and a valid one saving
+  fine), `TestCustomerWizardMappingPermissions` (a Sales Manager can't create/edit these rows; a System
+  Manager still can), and that an empty-string answer resolves the same as no answer at all (falls
+  through to default/fallback rather than "is not one of the available answers"). Tests that call
+  `resolve()` first disable the seeded questions (`isolate_from_seed_questions`) so they only see their
+  own ad-hoc ones.
+* `test_setup.py` — the seeders in `setup.py` directly: `ensure_territories()` seeds both `CRM Territory` and
+  ERPNext's own `Territory` and is idempotent; `ensure_customer_wizard_questions()` doesn't duplicate or error
+  on a second run and an admin's edit to a seeded row survives one; `ensure_erpnext_customer_sync_disabled()`
+  turns `create_customer_on_status_change` off once and never overwrites an admin's later choice to turn it
+  back on.
 * `test_erpnext_customer.py` — end to end through `convert()`/`setup_customer_for_deal()`: full setup creates
   a correctly-linked Customer/Address/Contact, GST validation failure leaves the Deal intact and retryable,
   role-gated override, the disabled-bridge no-op, duplicate-name confirm-and-link and a duplicate-GSTIN block
   (without touching the original Deal either way), reusing an Organization's existing Address / a Deal's
-  existing Contact (no duplicates), Sales Team row creation, permission denial, `lookup_gstin` (mocking India
-  Compliance's API), the retry endpoint's idempotency once a Customer is already linked, and a regression test
-  that `get_wizard_context` sends *every* question up front (not just the ones visible with no answers yet —
-  a follow-up question must still be there for the client to reveal later).
+  existing Contact (no duplicates) *only when no new address was typed* — typing a new one alongside an
+  existing Address creates a second Address instead of overwriting it, an explicitly-picked
+  `customer_existing_address` end to end (reused, not recreated, still gets resolved question fields, gains
+  Customer *and* Organization links, an unknown one rejected the same way
+  `existing_organization`/`existing_contact` already are), a question-driven Sales Team row, two new Sales
+  Persons landing at once splitting 100% instead of each getting 100 (and an admin's own pre-existing
+  allocation left alone, with a newly-added row getting whatever's left rather than a fresh 100), the
+  session-user auto-assigned Sales Person (and no row added when the acting user has none linked), a new
+  Customer created `disabled` (and an existing one left untouched), permission denial, `lookup_gstin` (mocking
+  India Compliance's API, including that a second lookup of the same GSTIN is served from cache instead of
+  hitting the API again), the retry endpoint's idempotency once a Customer is already linked, that its read of
+  the Deal's linked Customer takes a row lock (`for_update=True`, guarding against two concurrent retries both
+  creating a Customer), a regression test that `get_wizard_context` sends *every* question up front (not
+  just the ones visible with no answers yet — a follow-up question must still be there for the client to
+  reveal later), that the retry endpoint still works even while the wizard's own enable toggle is off
+  (deliberate — see "One `cw.resolve()` per scope, one save per record" above), that a full `convert()`
+  resolves each scope exactly once (not twice), and that Contact/Address end up saved exactly once each
+  (patching `Document.save`/`.insert()` with a counter) whether reusing an existing Address, picking one
+  via `existing_address`, or creating a brand-new one.
 
 Frontend (`frontend/tests/`): `wizard-logic.test.js` / `site-properties.test.js` (existing Deal Wizard
-behaviour) plus `questions.test.js` for `lib/questions.js` — the same branching/overlay/fallback/mandatory
-rules mirrored client-side, plus `resolvedFields`'s grouped, overlay-aware value computation for the Review
-step.
+behaviour, now including the address `{mode, existing, values}` shape — State required once an existing
+address isn't picked and a "new" one is started, `customer_existing_address` vs. `customer_address` in the
+payload depending on `mode`) plus `questions.test.js` for `lib/questions.js` — the same branching/overlay/
+fallback/mandatory rules mirrored client-side, plus `resolvedFields`'s grouped, overlay-aware value
+computation for the Review step.
 
 ## Manual verification checklist
 
@@ -368,16 +579,20 @@ step.
 5. **Service worker hygiene.** *Application → Cache Storage* shows `pranera-crm-*` caches only; `index.html` and `/api/*` are
    never in them. CRM at `/crm` still works and keeps its own worker.
 6. **ERPNext Customer, happy path.** With *ERPNext CRM Settings* enabled, convert a lead answering the GST
-   question chain ("Yes" → "Regular" → SEZ "No"), fill the Address (Country India needs a real `State`), and
-   submit. On the resulting Customer: `customer_type`/`customer_group`/`territory`/`default_currency`/
-   `payment_terms`/`gst_category` are set; its `customer_primary_address`/`customer_primary_contact` point at
-   an Address/Contact that also carry a `Customer` Dynamic Link row (check *Address → Links*); `crm_deal` on
-   the Customer and `erpnext_customer` on the CRM Deal cross-reference each other, and CRM's own **View
-   Customer** button (on the Deal) resolves to it.
-7. **GSTIN fetch and validation.** Type a GSTIN and press *Fetch* — organization name and address fields
-   populate (needs real internet access to the GST public API; a bad/unreachable lookup shows a clear inline
-   error, not a crash). Answer "GST Registered? Yes → Regular" but leave GSTIN blank and submit: the Deal
-   still converts, and you land on a "Try again" panel with India Compliance's own validation message.
+   question chain ("Yes" → "Composition" → SEZ "No"), fill the Address (Country India needs a real `State`),
+   and submit. On the resulting Customer: `customer_type`/`customer_group`/`territory`/`default_currency`/
+   `payment_terms`/`gst_category`/`tax_category` (`Registered Composition`) are set; its
+   `customer_primary_address`/`customer_primary_contact` point at an Address/Contact that also carry a
+   `Customer` Dynamic Link row (check *Address → Links*); `crm_deal` on the Customer and `erpnext_customer` on
+   the CRM Deal cross-reference each other, and CRM's own **View Customer** button (on the Deal) resolves to
+   it. The new Customer is **Disabled** — untick it once you've checked the wizard's answers.
+7. **GST fetch and validation.** For a *new* organization, answer "Is this customer a registered business or
+   an individual?" (**Business**), then "Does the customer have a GST Number?" appears. Answer **Yes**, type a
+   GSTIN and press *Fetch* — organization name and address fields further down populate (needs real internet
+   access to the GST public API; a bad/unreachable lookup shows a clear inline error, not a crash), then
+   "Regular"/SEZ follow-ups appear. Answer **No** on a different lead — no GSTIN field anywhere, straight to
+   typing the name/address by hand. Answer "Yes → Regular" but leave GSTIN blank and submit: the Deal still
+   converts, and you land on a "Try again" panel with India Compliance's own validation message.
 8. **Deal survives a Customer-step failure.** Reproduce #7's error, then check the CRM Deal directly — it
    exists and is not rolled back, only the Customer/Address/Contact attempt is. Press **Try again** with a
    valid GSTIN (or **Continue to deal** to skip it) and confirm no duplicate Customer/Address/Contact is left
@@ -385,9 +600,33 @@ step.
 9. **Duplicate customer name.** Pre-create a Customer with the same name the wizard would use, then convert;
    you land on **Use existing customer**, and afterwards the Deal is linked to that pre-existing Customer, not
    a second one.
-10. **ERPNext CRM Settings disabled.** Untick *Enabled* and convert a lead: no Customer section appears, the
-    Deal converts exactly as before this feature existed, and `/deal_wizard/…` with the bridge off elsewhere
-    still behaves normally.
+10. **ERPNext CRM Settings disabled.** Untick *Enabled* and convert a lead: the ERPNext-only Customer section
+    (Customer Group, GST, Address, ...) doesn't appear and the Deal converts exactly as before this feature
+    existed, **but** Individual/Business, Territory/Industry/Salutation/Gender still render as questions (no
+    raw pickers) and still apply to the resulting CRM Organization/Contact — they don't depend on the bridge
+    at all.
+11. **No raw Link pickers on Organization/Contact.** Fresh lead, ERPNext bridge on: the Organization step
+    shows no direct search box for Territory or Industry, and the Contact step shows none for Salutation or
+    Gender — every Link field on these two steps is a question. Answer them and convert; the resulting CRM
+    Organization/Contact and (bridge on) Customer all carry the expected values, matching #6's checks above
+    for Territory.
+12. **Individual customer, no Organization.** Fresh lead with an organization name already filled in (as if
+    captured from a lead form). Answer "Individual" — the organization name/website/revenue/employees fields
+    disappear immediately, even though a value was already there. Convert: no CRM Organization is created,
+    the Deal has none linked, and (bridge on) the resulting Customer is named after the Contact, not the
+    stale organization name. Switch back to "Business" on a different lead and confirm the fields reappear
+    empty (not the value that was there before switching).
+13. **"Choose Existing" shows a list.** Use a lead whose email matches an existing Contact (or organization
+    name matches an existing CRM Organization). Check "Choose Existing" on that step — the match appears as a
+    clickable row (not just a blank search box), with the match reason shown; clicking it selects it, and the
+    "Or search for..." field below still works for picking something else instead. Repeat on a lead with *no*
+    matches — just the plain search field, no list, same as before this existed.
+14. **Existing Address.** With the ERPNext bridge on, pre-create an Address, then convert a lead and check
+    "Choose Existing" under the Address heading — the manual fields disappear in favour of a search picker.
+    Pick the pre-created Address and submit: no new Address is created, the Customer's
+    `customer_primary_address` is that Address, it now carries both a `Customer` and a `CRM Organization`
+    Dynamic Link row (check *Address → Links*), and if you configured an Address Type / GST question, its
+    resolved value was still applied to the picked Address.
 
 ## Known limitations
 
@@ -400,10 +639,17 @@ step.
 * Editing values in "Create new" modifies the CRM Lead (that is how CRM builds the new records).
 * One Customer, one Address, one Contact per conversion — no add/remove-multiple UI (a deliberate "Light"
   scope: a Lead already has one organization and one primary contact).
-* A Dynamic question's live options are resolved once, from the answers known at page load; if you configure
-  one whose `source_filters` reference another question (e.g. suggest Sales Person by Territory), its option
-  list won't refresh automatically as that other question is answered — `refresh_questions` exists for this
-  and just isn't wired into the frontend yet, since no seeded question currently needs it.
+* A Dynamic question whose `source_filters` reference another question (e.g. suggest Sales Person by
+  Territory) has its options refreshed live: `useDynamicOptionsRefresh` (`frontend/src/composables/`) debounces
+  a call to `erpnext_customer.refresh_questions` on every answer change and patches the returned options back
+  in place. No seeded question currently uses `source_filters`, so this is ready but inert until an admin
+  configures one.
 * Country is a plain searchable Link (like the existing Organization/Contact search), not a mapping question —
   its ~250 entries are already the business terms, unlike Customer Group/GST Category where the right internal
   value isn't obvious from the label alone.
+* Tax Category is only resolved for a "Composition" GST answer (→ `Registered Composition`); "Regular" leaves
+  it unset, since telling `In-State` from `Out-State` needs a same-state-as-us comparison the wizard doesn't
+  ask about — add a follow-up question for that (targeting `Customer.tax_category`) if you need full coverage.
+* The Deal step's own fields (owner, source, currency, SLA, ...) still use CRM's own admin-configurable field
+  layout and its regular Link pickers — deliberately out of scope, since that's Frappe CRM's own system, not
+  the Customer Wizard Mapping one.
