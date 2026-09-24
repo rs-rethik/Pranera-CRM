@@ -64,8 +64,8 @@ Open a Lead in CRM and click **Convert to Deal**, or go to `/deal_wizard/<lead n
 
 | Where | What |
 | --- | --- |
-| **CRM Settings → Enable Convert to Deal Wizard** | On by default. Off falls back to CRM's standard dialog. |
-| **ERPNext CRM Settings → Enabled** | Turns on the ERPNext Customer section of the wizard. |
+| **Desk → FCRM Settings** (`/app/fcrm-settings`), *Defaults* tab → **Enable Convert to Deal Wizard** | On by default. Off falls back to CRM's standard dialog. It is not in the CRM app's own Settings popup, which has a fixed list of switches and no extension point. |
+| **Desk → ERPNext CRM Settings** (`/app/erpnext-crm-settings`, or CRM Settings → ERPNext) → **Enabled** | Turns on the ERPNext Customer section of the wizard. |
 | **Customer Wizard Mapping** | The questions, answers and the field values they set. Editable by System Manager only; edits survive `bench migrate`. |
 | **Email Account** | A default outgoing account, needed to send verification codes. |
 
