@@ -17,6 +17,7 @@ from crm.fcrm.doctype.crm_lead.crm_lead import LEAD_DEAL_FIELD_MAP as CRM_LEAD_D
 from crm.fcrm.doctype.crm_lead.crm_lead import convert_to_deal, is_custom_field
 from pranera_crm import customer_wizard as cw
 from pranera_crm import erpnext_customer
+from pranera_crm.email_verification import ensure_verified
 from pranera_crm.settings import is_erpnext_customer_enabled, is_wizard_enabled
 from pranera_crm.utils import field_meta
 
@@ -329,6 +330,10 @@ def convert(
 
 	lead_doc = frappe.get_doc(LEAD, lead)
 	_check_required_deal_fields(lead_doc, layout_fields, deal_values)
+
+	if not existing_contact:
+		edits = _parse_dict(lead_updates)
+		ensure_verified(lead, edits["email"] if "email" in edits else lead_doc.email)
 
 	include_bridge = bool(setup_customer) and is_erpnext_customer_enabled()
 	org_result = (

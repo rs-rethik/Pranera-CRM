@@ -51,6 +51,35 @@
           :error="showErrors ? errors[field.fieldname] : ''"
         />
       </div>
+      <div v-if="verified" class="flex items-center gap-2 text-sm text-ink-green-3">
+        <span>{{ __('Email verified') }}</span>
+      </div>
+      <div v-else-if="canVerify" class="space-y-2">
+        <div class="flex items-end gap-2">
+          <Button variant="subtle" :loading="verification.sending" @click="send">
+            {{ codeSent ? __('Resend code') : __('Verify Email') }}
+          </Button>
+          <template v-if="codeSent">
+            <FormControl
+              v-model="verification.code"
+              type="text"
+              size="sm"
+              inputmode="numeric"
+              maxlength="6"
+              :placeholder="__('Enter the code')"
+              class="flex-1"
+              @keyup.enter="confirm"
+            />
+            <Button variant="solid" :loading="verification.confirming" :disabled="!verification.code.trim()" @click="confirm">
+              {{ __('Confirm') }}
+            </Button>
+          </template>
+        </div>
+        <p v-if="codeSent" class="text-sm text-ink-gray-5">
+          {{ __('A code was sent to {0}. Ask the customer for it.', [contact.values.email]) }}
+        </p>
+        <ErrorMessage :message="verification.error" />
+      </div>
       <p v-if="candidates.auto_contact" class="text-sm text-ink-gray-5">
         {{ __('Contact {0} already has this email or phone, so CRM will link it instead of creating a new contact.', [candidates.auto_contact]) }}
       </p>
@@ -74,12 +103,13 @@
 
 <script setup>
 import { computed, inject, toRef } from 'vue'
-import { Switch } from 'frappe-ui'
+import { Button, ErrorMessage, FormControl, Switch } from 'frappe-ui'
 import { Link } from 'frappe-ui/frappe'
 import CandidateList from '@/components/CandidateList.vue'
 import FieldControl from '@/components/FieldControl.vue'
 import QuestionField from '@/components/QuestionField.vue'
 import { useDynamicOptionsRefresh } from '@/composables/useDynamicOptionsRefresh'
+import { useEmailVerification } from '@/composables/useEmailVerification'
 import { matchReason } from '@/lib/layout'
 import { visibleQuestions } from '@/lib/questions'
 import { __ } from '@/translation'
@@ -91,6 +121,10 @@ const errors = toRef(w, 'errors')
 const showErrors = toRef(w, 'showErrors')
 const contact = form.contact
 const customer = form.customer
+const { state: verification, verified, canVerify, codeSent, send, confirm } = useEmailVerification(
+  ctx.lead.name,
+  contact,
+)
 
 const ORDER = ['first_name', 'last_name', 'email', 'phone', 'mobile_no', 'job_title']
 const FULL_WIDTH = ['email', 'job_title']

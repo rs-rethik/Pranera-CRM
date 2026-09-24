@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { formatDate, formatDatetime, formatNumber, formatValue } from '@/lib/format'
+import { formatDate, formatDatetime, formatNumber, formatValue, parseNumber } from '@/lib/format'
 import { __, setTranslations } from '@/translation'
 
 const site = (over = {}) => ({
@@ -30,6 +30,14 @@ describe('translation (same contract as CRM)', () => {
 })
 
 describe('number format follows System Settings', () => {
+  it('parses what formatNumber produces', () => {
+    expect(parseNumber('1,234,567.89', site())).toBe(1234567.89)
+    expect(parseNumber('1.234.567,89', site({ number_format: '#.###,##' }))).toBe(1234567.89)
+    expect(parseNumber('12,34,567.50', site({ number_format: '#,##,###.##' }))).toBe(1234567.5)
+    expect(parseNumber('', site())).toBeNull()
+    expect(parseNumber('abc', site())).toBeNull()
+  })
+
   it('handles the common separators', () => {
     expect(formatNumber(1234567.891, { site: site(), precision: 2 })).toBe('1,234,567.89')
     expect(formatNumber(1234567.891, { site: site({ number_format: '#.###,##' }), precision: 2 })).toBe('1.234.567,89')

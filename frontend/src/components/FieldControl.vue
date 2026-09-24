@@ -42,6 +42,26 @@
   />
 
   <FormControl
+    v-else-if="kind === 'currency'"
+    type="text"
+    size="sm"
+    inputmode="decimal"
+    :model-value="amountText"
+    :label="label"
+    :description="field.description"
+    :required="!!field.reqd"
+    :disabled="isDisabled"
+    :error="error"
+    @focus="onAmountFocus"
+    @blur="onAmountBlur"
+    @update:model-value="onAmountInput"
+  >
+    <template v-if="currencySymbol" #prefix>
+      <span class="text-ink-gray-5">{{ currencySymbol }}</span>
+    </template>
+  </FormControl>
+
+  <FormControl
     v-else-if="kind === 'number'"
     type="number"
     size="sm"
@@ -98,10 +118,12 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { FormControl } from 'frappe-ui'
 import { Link } from 'frappe-ui/frappe'
+import { formatNumber, parseNumber } from '@/lib/format'
 import { isSupported, selectOptions } from '@/lib/layout'
+import { getSite } from '@/lib/site'
 import { __ } from '@/translation'
 
 const props = defineProps({
@@ -113,7 +135,7 @@ const props = defineProps({
 })
 const emit = defineEmits(['update:modelValue'])
 
-const NUMBER = new Set(['Int', 'Float', 'Currency', 'Percent'])
+const NUMBER = new Set(['Int', 'Float', 'Percent'])
 const TEXTAREA = new Set(['Small Text', 'Text', 'Long Text', 'Text Editor', 'Markdown Editor', 'HTML Editor', 'Code', 'JSON'])
 
 const label = computed(() => __(props.field.label || props.field.fieldname))
@@ -126,6 +148,7 @@ const kind = computed(() => {
   if (f.fieldtype === 'Link' && f.options) return 'link'
   if (f.fieldtype === 'Select') return 'select'
   if (f.fieldtype === 'Check') return 'check'
+  if (f.fieldtype === 'Currency') return 'currency'
   if (NUMBER.has(f.fieldtype)) return 'number'
   if (f.fieldtype === 'Date') return 'date'
   if (f.fieldtype === 'Datetime') return 'datetime'
@@ -146,6 +169,32 @@ const textType = computed(() => {
   if (fieldtype === 'Phone' || options === 'Phone') return 'tel'
   return 'text'
 })
+
+const amountFocused = ref(false)
+const amountDraft = ref('')
+const currencySymbol = computed(() => getSite().currency_symbol || '')
+
+const amountText = computed(() => {
+  if (amountFocused.value) return amountDraft.value
+  const value = props.modelValue
+  if (value === null || value === undefined || value === '') return ''
+  return formatNumber(value, { precision: getSite().currency_precision })
+})
+
+function onAmountFocus() {
+  const value = props.modelValue
+  amountDraft.value = value === null || value === undefined || value === '' ? '' : String(value)
+  amountFocused.value = true
+}
+
+function onAmountInput(text) {
+  amountDraft.value = text ?? ''
+  emit('update:modelValue', parseNumber(text))
+}
+
+function onAmountBlur() {
+  amountFocused.value = false
+}
 
 function onNumber(value) {
   if (value === '' || value === null || value === undefined) return emit('update:modelValue', null)

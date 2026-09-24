@@ -107,6 +107,17 @@ describe('form state', () => {
     expect('organization' in second.lead_updates).toBe(false)
   })
 
+  it('always sets up the ERPNext customer when the bridge is on, even if a draft says otherwise', () => {
+    const ctxWithCustomer = {
+      ...ctx,
+      customer: { enabled: true, organization_questions: [], contact_questions: [], address_fields: [] },
+    }
+    const form = createForm(ctxWithCustomer)
+    applyDraft(form, { form: { customer: { enabled: false } } })
+    expect(form.customer.enabled).toBe(true)
+    expect(customerPayload(form).setup_customer).toBe(true)
+  })
+
   it('sends address values for "new" and customer_existing_address for "existing"', () => {
     const ctxWithCustomer = {
       ...ctx,
@@ -217,6 +228,7 @@ describe('per-step validation and the step guard', () => {
 
   it('never lets ?step= run ahead of the first invalid step', () => {
     const form = createForm(ctx)
+    form.contact.emailVerification.verifiedEmail = form.contact.values.email
     expect(firstInvalidStep(form, ctx)).toBe(2)
     expect(resolveStep('4', form, ctx)).toBe(2)
     expect(resolveStep('1', form, ctx)).toBe(0)

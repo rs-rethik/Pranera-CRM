@@ -77,9 +77,16 @@
           </p>
           <div ref="errorBox"><ErrorMessage class="mt-4" :message="submitError" /></div>
 
+          <div v-if="!isLast && !stepValid" class="mt-4 text-sm text-ink-gray-5" role="status">
+            <p>{{ __('Complete the required fields to continue:') }}</p>
+            <ul class="mt-1 list-disc ps-5">
+              <li v-for="message in stepProblems" :key="message">{{ message }}</li>
+            </ul>
+          </div>
+
           <div class="mt-6 flex items-center" :class="stepIndex > 0 ? 'justify-between' : 'justify-end'">
             <Button v-if="stepIndex > 0" variant="subtle" :disabled="submitting" @click="back">{{ __('Back') }}</Button>
-            <Button v-if="!isLast" variant="solid" @click="next">{{ __('Next') }}</Button>
+            <Button v-if="!isLast" variant="solid" :disabled="!stepValid" @click="next">{{ __('Next') }}</Button>
             <Button v-else variant="solid" :loading="submitting" :disabled="!online || submitting" @click="submit">
               {{ retryDeal ? __('Save and try again') : __('Convert to Deal') }}
             </Button>
@@ -141,6 +148,8 @@ let draftStep = null
 
 const active = computed(() => ready.value && !!wizard.form)
 const isLast = computed(() => stepIndex.value === STEPS.length - 1)
+const stepProblems = computed(() => [...new Set(Object.values(wizard.errors || {}))])
+const stepValid = computed(() => !active.value || stepProblems.value.length === 0)
 const leadHref = computed(() => `/crm/leads/${encodeURIComponent(props.name)}`)
 const crmHref = '/crm'
 const dealHref = (deal) => `/crm/deals/${encodeURIComponent(deal)}`

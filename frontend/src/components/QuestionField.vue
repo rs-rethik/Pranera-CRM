@@ -5,6 +5,7 @@
     :model-value="modelValue ?? defaultValue ?? ''"
     :options="selectItems"
     :label="question.label"
+    :required="!!question.is_mandatory"
     :placeholder="__('Select...')"
     :error="error"
     @update:model-value="(v) => emit('update:modelValue', v ?? '')"

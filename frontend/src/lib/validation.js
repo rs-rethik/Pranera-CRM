@@ -11,6 +11,9 @@ export const STEPS = [
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
+export const normalizeEmail = (email) => String(email ?? '').trim().toLowerCase()
+export const isValidEmail = (email) => EMAIL.test(String(email).trim())
+
 const GST_GATE_KEY = 'gst_registered'
 
 /** Bridge-independent questions (Territory, Industry, ...) always apply; the rest
@@ -70,7 +73,10 @@ export function validateStep(index, form, ctx) {
         errors.first_name = __('{0} is required', [__('First Name')])
       }
       const email = contact.values.email
-      if (!isEmpty(email) && !EMAIL.test(String(email).trim())) errors.email = __('Enter a valid email address')
+      if (!isEmpty(email) && !isValidEmail(email)) errors.email = __('Enter a valid email address')
+      else if (!isEmpty(email) && normalizeEmail(email) !== normalizeEmail(contact.emailVerification?.verifiedEmail)) {
+        errors.email = __('Verify this email address before continuing')
+      }
     }
     const contactQuestions = bridgeAwareQuestions(ctx?.customer?.contact_questions, form.customer?.enabled)
     for (const q of unansweredMandatory(contactQuestions, form.customer?.contactAnswers)) {

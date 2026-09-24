@@ -4,3 +4,4 @@
 
 [post_model_sync]
 # Patches added in this section will be executed after doctypes are migrated
+pranera_crm.patches.restrict_customer_group_by_customer_type

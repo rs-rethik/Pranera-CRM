@@ -21,6 +21,7 @@ export function createForm(ctx) {
       mode: auto_contact ? 'existing' : 'new',
       existing: auto_contact || '',
       values: pick(ctx.contact_fields),
+      emailVerification: { verifiedEmail: '' },
     },
     deal: { ...(ctx.deal_defaults || {}) },
     customer: {
@@ -49,10 +50,12 @@ export function applyDraft(form, draft) {
       if (field in (saved[key].values || {})) form[key].values[field] = saved[key].values[field]
     }
   }
+  if (typeof saved.contact?.emailVerification?.verifiedEmail === 'string') {
+    form.contact.emailVerification.verifiedEmail = saved.contact.emailVerification.verifiedEmail
+  }
   if (saved.deal && typeof saved.deal === 'object') Object.assign(form.deal, saved.deal)
 
   if (saved.customer && typeof saved.customer === 'object') {
-    if (typeof saved.customer.enabled === 'boolean') form.customer.enabled = saved.customer.enabled
     for (const key of ['answers', 'contactAnswers', 'overrides']) {
       if (saved.customer[key] && typeof saved.customer[key] === 'object') {
         Object.assign(form.customer[key], saved.customer[key])

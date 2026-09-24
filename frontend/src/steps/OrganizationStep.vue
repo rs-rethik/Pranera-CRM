@@ -110,7 +110,7 @@
         <template v-if="ctx.customer?.enabled">
           <div class="h-px bg-outline-gray-2" />
 
-          <Switch v-model="customer.enabled" :label="__('Set up this customer in ERPNext')" />
+          <h3 class="text-base font-medium text-ink-gray-8">{{ __('Customer details (ERPNext)') }}</h3>
 
           <template v-if="customer.enabled">
             <p v-if="ctx.customer.existing_customer" class="text-sm text-ink-gray-5">

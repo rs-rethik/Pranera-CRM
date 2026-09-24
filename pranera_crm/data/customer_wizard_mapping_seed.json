@@ -27,12 +27,34 @@
   "target_doctype": "Customer",
   "target_fieldname": "customer_group",
   "question_type": "Fixed",
+  "depends_on_question": "customer_type",
+  "depends_on_option": "individual",
+  "depends_on_operator": "Is not",
   "sequence": 20,
   "override_roles": "System Manager\nSales Manager",
   "options": [
    {"option_label": "Business (Wholesale / Retail / Distributor)", "option_value": "business", "mapped_value": "Commercial"},
    {"option_label": "Government", "option_value": "government", "mapped_value": "Government"},
-   {"option_label": "Non-Profit / NGO", "option_value": "non_profit", "mapped_value": "Non Profit"},
+   {"option_label": "Non-Profit / NGO", "option_value": "non_profit", "mapped_value": "Non Profit"}
+  ]
+ },
+ {
+  "doctype": "Customer Wizard Mapping",
+  "name": "customer_group_individual",
+  "question_key": "customer_group_individual",
+  "label": "What kind of customer is this?",
+  "scope": "Organization",
+  "enabled": 1,
+  "requires_erpnext_bridge": 1,
+  "target_doctype": "Customer",
+  "target_fieldname": "customer_group",
+  "question_type": "Fixed",
+  "depends_on_question": "customer_type",
+  "depends_on_option": "individual",
+  "depends_on_operator": "Is",
+  "sequence": 21,
+  "override_roles": "System Manager\nSales Manager",
+  "options": [
    {"option_label": "Individual", "option_value": "individual", "mapped_value": "Individual"}
   ]
  },

@@ -89,3 +89,32 @@ class TestEnsureErpnextCustomerSyncDisabled(CRMTestCase):
 		setup.ensure_erpnext_customer_sync_disabled()
 
 		self.assertEqual(frappe.db.get_single_value(self.SETTINGS, self.FIELD), 1)
+
+
+class TestCustomerGroupFollowsCustomerType(CRMTestCase):
+	"""A Registered Business must never end up in the Individual customer group,
+	nor an Individual in a business group."""
+
+	def setUp(self):
+		frappe.set_user("Administrator")
+		setup.ensure_customer_wizard_questions()
+
+	def tearDown(self):
+		frappe.db.rollback()
+
+	def _group(self, answers):
+		from pranera_crm import customer_wizard as cw
+
+		return cw.resolve("Organization", answers)["fields"]["Customer"].get("customer_group")
+
+	def test_business_can_not_be_individual_group(self):
+		self.assertEqual(self._group({"customer_type": "company", "customer_group": "business"}), "Commercial")
+		values = [o.option_value for o in frappe.get_doc("Customer Wizard Mapping", "customer_group").options]
+		self.assertNotIn("individual", values)
+
+	def test_individual_gets_individual_group_regardless_of_group_answer(self):
+		self.assertEqual(self._group({"customer_type": "individual"}), "Individual")
+		self.assertEqual(self._group({"customer_type": "individual", "customer_group": "government"}), "Individual")
+
+	def test_no_group_until_customer_type_answered(self):
+		self.assertIsNone(self._group({}))

@@ -32,6 +32,12 @@ def deal_status():
 	return frappe.get_all("CRM Deal Status", pluck="name", order_by="position asc", limit=1)[0]
 
 
+def verify_email(lead, email):
+	from pranera_crm import email_verification as ev
+
+	frappe.cache.set_value(ev._key("verified", lead, email), 1, expires_in_sec=ev.VERIFIED_TTL)
+
+
 def make_lead(**kwargs):
 	suffix = _hash()
 	data = {
@@ -44,7 +50,9 @@ def make_lead(**kwargs):
 		"website": f"https://wizard-{suffix}.example.com",
 	}
 	data.update(kwargs)
-	return frappe.get_doc(data).insert()
+	lead = frappe.get_doc(data).insert()
+	verify_email(lead.name, lead.email)
+	return lead
 
 
 def make_org(name=None, **kwargs):
@@ -171,6 +179,7 @@ class TestConvert(CRMTestCase):
 		original_org = lead.organization
 		renamed = f"Renamed Org {_hash()}"
 		new_email = f"renamed-{_hash()}@example.com"
+		verify_email(lead.name, new_email)
 
 		deal = convert_deal(
 			lead.name,

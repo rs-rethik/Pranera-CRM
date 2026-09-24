@@ -35,6 +35,18 @@ export function formatNumber(value, { precision, site = getSite() } = {}) {
   return sign + groupInteger(integer, format) + (fraction ? format.decimal + fraction : '')
 }
 
+/** Inverse of formatNumber: text typed in the site's number format -> a number, or null if it isn't one. */
+export function parseNumber(text, site = getSite()) {
+  const format = NUMBER_FORMATS[site.number_format] || NUMBER_FORMATS['#,###.##']
+  let cleaned = String(text ?? '').trim()
+  if (!cleaned) return null
+  cleaned = cleaned.split(format.group.trim() || format.group).join('')
+  if (format.decimal && format.decimal !== '.') cleaned = cleaned.replace(format.decimal, '.')
+  cleaned = cleaned.replace(/[^\d.-]/g, '')
+  const number = Number.parseFloat(cleaned)
+  return Number.isNaN(number) ? null : number
+}
+
 /** 'YYYY-MM-DD' (or a datetime) -> the site's date_format (yyyy-mm-dd, dd-mm-yyyy, mm/dd/yyyy, ...). */
 export function formatDate(value, site = getSite()) {
   const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(value ?? ''))

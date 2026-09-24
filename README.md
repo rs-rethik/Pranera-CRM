@@ -274,6 +274,21 @@ client sends, so a stale draft or a tampered payload can't sneak an Organization
 ERPNext section still apply to an individual customer; GST is still asked either way (a freelancer or
 proprietor can be GST-registered too) — right after this question, not instead of it.
 
+### Email verification (new contacts)
+
+When the Contact step is on **Create new** and an email is entered (including the one prefilled from the lead),
+a **Verify Email** button appears. It emails a 6-digit code to that address; the sales user asks the customer
+for it and types it in (**Confirm**). Editing the email afterwards resets the verified state. Choose Existing
+and a blank email skip this. `convert()` enforces it server-side (`EmailNotVerified`) before anything is saved,
+so a tampered client can't skip it.
+
+There is no generic "verify any email" API in Frappe v15: `frappe.twofactor` is tied to a `User` and the login
+flow. `pranera_crm/email_verification.py` therefore reuses its building blocks (a `pyotp` HOTP code, 2FA's email
+body template, `frappe.sendmail`, `frappe.cache` with expiry, `frappe.rate_limiter`) instead of a bespoke scheme.
+The code lives 5 minutes, 5 wrong tries invalidate it, a verified flag lasts 1 hour, both keyed by user + lead +
+email; sending is limited to 5 per 10 minutes. **Needs a default outgoing Email Account**; without one the send
+fails with a clear message.
+
 ### GST (via India Compliance)
 
 Requires the `india_compliance` app (`bench get-app india_compliance --branch version-15`, matching this
@@ -525,6 +540,7 @@ Python tests, all rolled back automatically at the end of each test:
   through to default/fallback rather than "is not one of the available answers"). Tests that call
   `resolve()` first disable the seeded questions (`isolate_from_seed_questions`) so they only see their
   own ad-hoc ones.
+* `test_email_verification.py` — code emailed and never returned, correct/wrong/expired codes, 5-attempt lockout, per-email scope, mail failure, permission denial, and `convert()` blocking an unverified (or edited) new-contact email while skipping existing contacts and blank emails.
 * `test_setup.py` — the seeders in `setup.py` directly: `ensure_territories()` seeds both `CRM Territory` and
   ERPNext's own `Territory` and is idempotent; `ensure_customer_wizard_questions()` doesn't duplicate or error
   on a second run and an admin's edit to a seeded row survives one; `ensure_erpnext_customer_sync_disabled()`
