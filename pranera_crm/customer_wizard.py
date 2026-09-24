@@ -165,7 +165,7 @@ def resolve(
 			option = _option_row(question, given) if given is not None else None
 			if given is not None and option is None:
 				frappe.throw(
-					_("{0}: \"{1}\" is not one of the available answers").format(question.label, given),
+					_('{0}: "{1}" is not one of the available answers').format(question.label, given),
 					title=_("Invalid Answer"),
 				)
 			answer_label = option.option_label if option else None
@@ -197,7 +197,12 @@ def resolve(
 			else:
 				fields.setdefault(question.target_doctype, {})[question.target_fieldname] = value
 
-		if question.secondary_target_doctype and question.question_type == "Fixed" and option and not overridden:
+		if (
+			question.secondary_target_doctype
+			and question.question_type == "Fixed"
+			and option
+			and not overridden
+		):
 			secondary_value = option.secondary_mapped_value
 			if secondary_value:
 				fields.setdefault(question.secondary_target_doctype, {})[

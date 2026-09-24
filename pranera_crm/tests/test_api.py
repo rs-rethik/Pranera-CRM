@@ -1,6 +1,6 @@
 import frappe
-
 from crm.tests import CRMTestCase
+
 from pranera_crm.api import LeadAlreadyConverted, convert, find_candidates, get_wizard_context
 from pranera_crm.tests.test_customer_wizard import isolate_from_seed_questions, make_question
 
@@ -198,7 +198,9 @@ class TestConvert(CRMTestCase):
 		doc = frappe.get_doc("CRM Deal", deal)
 		self.assertEqual(doc.lead, lead.name)
 		self.assertEqual(doc.organization, renamed)
-		self.assertEqual(frappe.db.get_value("CRM Organization", renamed, "website"), "https://renamed.example.com")
+		self.assertEqual(
+			frappe.db.get_value("CRM Organization", renamed, "website"), "https://renamed.example.com"
+		)
 		self.assertFalse(frappe.db.exists("CRM Organization", original_org))
 
 		contact = frappe.get_doc("Contact", doc.contacts[0].contact)
@@ -382,15 +384,28 @@ class TestWizardContext(CRMTestCase):
 
 		try:
 			frappe.get_doc(
-				{"doctype": "Custom Field", "dt": "CRM Lead", "fieldname": lead_fieldname, "label": label, "fieldtype": "Data"}
+				{
+					"doctype": "Custom Field",
+					"dt": "CRM Lead",
+					"fieldname": lead_fieldname,
+					"label": label,
+					"fieldtype": "Data",
+				}
 			).insert(ignore_permissions=True)
 			frappe.get_doc(
-				{"doctype": "Custom Field", "dt": "CRM Deal", "fieldname": deal_fieldname, "label": label, "fieldtype": "Data"}
+				{
+					"doctype": "Custom Field",
+					"dt": "CRM Deal",
+					"fieldname": deal_fieldname,
+					"label": label,
+					"fieldtype": "Data",
+				}
 			).insert(ignore_permissions=True)
 			frappe.clear_cache(doctype="CRM Lead")
 			frappe.clear_cache(doctype="CRM Deal")
 
 			from crm.fcrm.doctype.crm_lead.crm_lead import get_matching_custom_deal_field
+
 			from pranera_crm.api import _deal_defaults
 
 			lead_meta = frappe.get_meta("CRM Lead")
@@ -499,7 +514,9 @@ class TestWizardSwitch(CRMTestCase):
 	def test_enabled_by_default_when_never_saved(self):
 		from pranera_crm.settings import ENABLE_FIELD, SETTINGS, is_wizard_enabled
 
-		frappe.db.sql("delete from `tabSingles` where `doctype` = %s and `field` = %s", (SETTINGS, ENABLE_FIELD))
+		frappe.db.sql(
+			"delete from `tabSingles` where `doctype` = %s and `field` = %s", (SETTINGS, ENABLE_FIELD)
+		)
 		self.assertTrue(is_wizard_enabled())
 
 	def test_ticked_and_unticked(self):

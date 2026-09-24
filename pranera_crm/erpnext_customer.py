@@ -245,7 +245,9 @@ def create(
 		frappe.db.set_value(CUSTOMER, customer.name, "customer_primary_address", address_name)
 
 	if contact_name:
-		_apply_contact_updates(contact_name, contact_result["fields"].get(CONTACT, {}), linked_customer=customer.name)
+		_apply_contact_updates(
+			contact_name, contact_result["fields"].get(CONTACT, {}), linked_customer=customer.name
+		)
 
 	if frappe.get_meta(DEAL).has_field("erpnext_customer"):
 		frappe.db.set_value(DEAL, deal, "erpnext_customer", customer.name)
@@ -278,9 +280,7 @@ def _validate_resolved_fields(fields_by_doctype: dict):
 			elif field.fieldtype == "Select":
 				options = [o.strip() for o in (field.options or "").split("\n") if o.strip()]
 				if options and value not in options:
-					frappe.throw(
-						_("{0} is not a valid value for {1}.{2}").format(value, doctype, fieldname)
-					)
+					frappe.throw(_("{0} is not a valid value for {1}.{2}").format(value, doctype, fieldname))
 
 
 def _mirror_gst_category_to_customer(fields_by_doctype: dict):
@@ -388,7 +388,7 @@ def _apply_sales_team(customer, sales_persons: list[str]):
 
 
 def _session_sales_person(user: str) -> str | None:
-	""""Who handles this customer?" is never asked — it's whoever is running the
+	""" "Who handles this customer?" is never asked — it's whoever is running the
 	wizard, found via the standard ERPNext link (User -> Employee.user_id ->
 	Sales Person.employee). ``None`` if the acting user isn't linked to one (e.g.
 	Administrator, or a user with no Employee/Sales Person record)."""
@@ -463,7 +463,9 @@ def _upsert_address(
 	if org_doc:
 		addr.append("links", {"link_doctype": ORGANIZATION, "link_name": org_doc.name})
 	if linked_customer:
-		addr.append("links", {"link_doctype": CUSTOMER, "link_name": linked_customer, "link_title": linked_customer})
+		addr.append(
+			"links", {"link_doctype": CUSTOMER, "link_name": linked_customer, "link_title": linked_customer}
+		)
 	addr.insert()
 
 	if org_doc and not org_doc.address:

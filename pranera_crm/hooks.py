@@ -254,7 +254,6 @@ required_apps = ["crm", "erpnext"]
 # ignore_translatable_strings_from = []
 
 
-
 # Deal wizard
 # -----------
 

@@ -15,7 +15,9 @@ def before_migrate():
 	runs later in this same `bench migrate`) unconditionally resets it back to the
 	shipped default — see `restore_form_script_enabled_state`."""
 	if frappe.db.exists("CRM Form Script", FORM_SCRIPT):
-		_form_script_enabled_before_sync["enabled"] = frappe.db.get_value("CRM Form Script", FORM_SCRIPT, "enabled")
+		_form_script_enabled_before_sync["enabled"] = frappe.db.get_value(
+			"CRM Form Script", FORM_SCRIPT, "enabled"
+		)
 
 
 def after_install():
@@ -83,7 +85,9 @@ def ensure_territories():
 	first time this question resolves to "India"."""
 	for name in ("India", "Rest Of The World"):
 		if not frappe.db.exists("CRM Territory", name):
-			frappe.get_doc({"doctype": "CRM Territory", "territory_name": name}).insert(ignore_permissions=True)
+			frappe.get_doc({"doctype": "CRM Territory", "territory_name": name}).insert(
+				ignore_permissions=True
+			)
 		if not frappe.db.exists("Territory", name):
 			frappe.get_doc({"doctype": "Territory", "territory_name": name}).insert(ignore_permissions=True)
 
@@ -134,7 +138,7 @@ def ensure_erpnext_customer_sync_disabled():
 
 
 def remove_sales_person_question():
-	""""Who handles this customer?" used to be a seeded question; it's now derived
+	""" "Who handles this customer?" used to be a seeded question; it's now derived
 	automatically from the session user's linked Sales Person instead (see
 	``erpnext_customer._session_sales_person``), so it should never be asked. Clean
 	up the row a site installed before this change shipped — a fresh install never

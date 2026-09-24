@@ -1,4 +1,4 @@
-exclude: 'node_modules|.git'
+exclude: 'node_modules|.git|pranera_crm/public/frontend/|pranera_crm/www/deal_wizard.html|frontend/components.d.ts'
 default_stages: [pre-commit]
 fail_fast: false
 

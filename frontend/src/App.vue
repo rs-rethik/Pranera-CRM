@@ -1,7 +1,7 @@
 <template>
-  <FrappeUIProvider>
-    <router-view />
-  </FrappeUIProvider>
+	<FrappeUIProvider>
+		<router-view />
+	</FrappeUIProvider>
 </template>
 
 <script setup>
@@ -11,7 +11,7 @@ import { getTranslations } from '@/translation'
 
 const { setTheme } = useTheme()
 if (!localStorage.getItem('theme')) {
-  setTheme('light')
+	setTheme('light')
 }
 
 const site = getSite()

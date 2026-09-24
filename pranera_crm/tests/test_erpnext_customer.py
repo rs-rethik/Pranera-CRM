@@ -1,6 +1,8 @@
-import frappe
+from typing import ClassVar
 
+import frappe
 from crm.tests import CRMTestCase
+
 from pranera_crm import customer_wizard as cw
 from pranera_crm import erpnext_customer as ec
 from pranera_crm.api import convert, get_wizard_context, setup_customer_for_deal
@@ -66,8 +68,6 @@ class TestConvertWithCustomerSetup(CRMTestCase):
 		once and passes the result through."""
 		from unittest.mock import patch
 
-		from pranera_crm import customer_wizard as cw
-
 		lead = make_lead()
 		with patch("pranera_crm.customer_wizard.resolve", wraps=cw.resolve) as spy:
 			response = convert(lead.name, deal=self.deal, setup_customer=True)
@@ -91,7 +91,9 @@ class TestConvertWithCustomerSetup(CRMTestCase):
 			label="What kind of customer is this?",
 			target_doctype="Customer",
 			target_fieldname="customer_group",
-			options=[{"option_label": "Commercial", "option_value": "commercial", "mapped_value": "Commercial"}],
+			options=[
+				{"option_label": "Commercial", "option_value": "commercial", "mapped_value": "Commercial"}
+			],
 		)
 		designation_q = make_question(
 			question_key=f"_it_designation_{_hash()}",
@@ -110,7 +112,13 @@ class TestConvertWithCustomerSetup(CRMTestCase):
 			customer_answers=frappe.as_json({gst_q.question_key: "no", group_q.question_key: "commercial"}),
 			contact_customer_answers=frappe.as_json({designation_q.question_key: "owner"}),
 			customer_address=frappe.as_json(
-				{"address_line1": "1 MG Road", "city": "Chennai", "state": "Tamil Nadu", "country": "India", "pincode": "600001"}
+				{
+					"address_line1": "1 MG Road",
+					"city": "Chennai",
+					"state": "Tamil Nadu",
+					"country": "India",
+					"pincode": "600001",
+				}
 			),
 		)
 
@@ -127,11 +135,15 @@ class TestConvertWithCustomerSetup(CRMTestCase):
 
 		address = frappe.get_doc("Address", customer.customer_primary_address)
 		self.assertEqual(address.city, "Chennai")
-		self.assertTrue(any(link.link_doctype == "Customer" and link.link_name == customer.name for link in address.links))
+		self.assertTrue(
+			any(link.link_doctype == "Customer" and link.link_name == customer.name for link in address.links)
+		)
 
 		contact = frappe.get_doc("Contact", customer.customer_primary_contact)
 		self.assertEqual(contact.designation, "Owner")
-		self.assertTrue(any(link.link_doctype == "Customer" and link.link_name == customer.name for link in contact.links))
+		self.assertTrue(
+			any(link.link_doctype == "Customer" and link.link_name == customer.name for link in contact.links)
+		)
 		deal_contact = frappe.db.get_value("CRM Deal", response["deal"], "name")
 		deal_doc = frappe.get_doc("CRM Deal", deal_contact)
 		self.assertEqual([c.contact for c in deal_doc.contacts], [contact.name])
@@ -177,7 +189,15 @@ class TestConvertWithCustomerSetup(CRMTestCase):
 			lead.name,
 			deal=self.deal,
 			setup_customer=True,
-			customer_address=frappe.as_json({"address_line1": "1 MG Road", "city": "Chennai", "state": "Tamil Nadu", "country": "India", "gstin": "NOT-A-GSTIN"}),
+			customer_address=frappe.as_json(
+				{
+					"address_line1": "1 MG Road",
+					"city": "Chennai",
+					"state": "Tamil Nadu",
+					"country": "India",
+					"gstin": "NOT-A-GSTIN",
+				}
+			),
 		)
 		self.assertIsNotNone(response["deal"])
 		self.assertIsNone(response["customer"])
@@ -191,7 +211,9 @@ class TestConvertWithCustomerSetup(CRMTestCase):
 		q = make_question(
 			target_doctype="Customer",
 			target_fieldname="customer_group",
-			options=[{"option_label": "Commercial", "option_value": "commercial", "mapped_value": "Commercial"}],
+			options=[
+				{"option_label": "Commercial", "option_value": "commercial", "mapped_value": "Commercial"}
+			],
 			override_roles="Sales Manager",
 		)
 		user = make_user(roles=["Sales User", "Sales Manager"])
@@ -240,7 +262,9 @@ class TestErpnextCustomerCreate(CRMTestCase):
 		deal = make_deal(organization=org.name, contact=contact.name)
 
 		result = ec.create(deal=deal.name, organization_answers={}, contact_answers={}, address={})
-		self.assertEqual(frappe.get_doc("Customer", result["customer"]).customer_primary_address, address.name)
+		self.assertEqual(
+			frappe.get_doc("Customer", result["customer"]).customer_primary_address, address.name
+		)
 		self.assertEqual(frappe.db.count("Address", {"address_title": org.name}), 1)
 
 	def test_typing_a_new_address_creates_a_second_one_instead_of_overwriting(self):
@@ -270,7 +294,12 @@ class TestErpnextCustomerCreate(CRMTestCase):
 			deal=deal.name,
 			organization_answers={},
 			contact_answers={},
-			address={"address_line1": "Brand New Street", "city": "Bengaluru", "state": "Karnataka", "country": "India"},
+			address={
+				"address_line1": "Brand New Street",
+				"city": "Bengaluru",
+				"state": "Karnataka",
+				"country": "India",
+			},
 		)
 
 		customer = frappe.get_doc("Customer", result["customer"])
@@ -290,11 +319,18 @@ class TestErpnextCustomerCreate(CRMTestCase):
 			deal=deal.name,
 			organization_answers={},
 			contact_answers={},
-			address={"address_line1": "1 MG Road", "city": "Chennai", "state": "Tamil Nadu", "country": "India"},
+			address={
+				"address_line1": "1 MG Road",
+				"city": "Chennai",
+				"state": "Tamil Nadu",
+				"country": "India",
+			},
 		)
 		customer = frappe.get_doc("Customer", result["customer"])
 		self.assertTrue(customer.customer_primary_address)
-		self.assertEqual(frappe.db.get_value("CRM Organization", org.name, "address"), customer.customer_primary_address)
+		self.assertEqual(
+			frappe.db.get_value("CRM Organization", org.name, "address"), customer.customer_primary_address
+		)
 
 	def test_no_address_input_and_no_existing_address_skips_address(self):
 		org = make_org()
@@ -371,7 +407,12 @@ class TestErpnextCustomerCreate(CRMTestCase):
 			return original_save(self, *args, **kwargs)
 
 		with patch.object(Document, "save", counting_save):
-			ec.create(deal=deal.name, organization_answers={}, contact_answers={q.question_key: "manager"}, address={})
+			ec.create(
+				deal=deal.name,
+				organization_answers={},
+				contact_answers={q.question_key: "manager"},
+				address={},
+			)
 
 		self.assertEqual(len(saves), 1)
 		contact.reload()
@@ -405,12 +446,19 @@ class TestErpnextCustomerCreate(CRMTestCase):
 				deal=deal.name,
 				organization_answers={},
 				contact_answers={},
-				address={"address_line1": "1 MG Road", "city": "Chennai", "state": "Tamil Nadu", "country": "India"},
+				address={
+					"address_line1": "1 MG Road",
+					"city": "Chennai",
+					"state": "Tamil Nadu",
+					"country": "India",
+				},
 			)
 
 		self.assertEqual(inserts, [1])
 		self.assertEqual(saves, [])
-		address = frappe.get_doc("Address", frappe.get_doc("Customer", result["customer"]).customer_primary_address)
+		address = frappe.get_doc(
+			"Address", frappe.get_doc("Customer", result["customer"]).customer_primary_address
+		)
 		self.assertTrue(any(row.link_doctype == "Customer" for row in address.links))
 		self.assertTrue(any(row.link_doctype == "CRM Organization" for row in address.links))
 
@@ -444,7 +492,11 @@ class TestErpnextCustomerCreate(CRMTestCase):
 
 		with patch.object(Document, "save", counting_save):
 			ec.create(
-				deal=deal.name, organization_answers={}, contact_answers={}, address={}, existing_address=other.name
+				deal=deal.name,
+				organization_answers={},
+				contact_answers={},
+				address={},
+				existing_address=other.name,
 			)
 
 		self.assertEqual(len(saves), 1)
@@ -454,7 +506,9 @@ class TestErpnextCustomerCreate(CRMTestCase):
 
 	def test_duplicate_customer_name_requires_confirmation(self):
 		org = make_org()
-		existing = frappe.get_doc({"doctype": "Customer", "customer_name": org.name}).insert(ignore_permissions=True)
+		existing = frappe.get_doc({"doctype": "Customer", "customer_name": org.name}).insert(
+			ignore_permissions=True
+		)
 		contact = make_contact()
 		deal = make_deal(organization=org.name, contact=contact.name)
 
@@ -463,13 +517,20 @@ class TestErpnextCustomerCreate(CRMTestCase):
 		self.assertEqual(ctx.exception.existing_customer, existing.name)
 		self.assertEqual(frappe.db.count("Customer", {"customer_name": org.name}), 1)
 
-		result = ec.create(deal=deal.name, organization_answers={}, contact_answers={}, address={}, confirm_duplicate=True)
+		result = ec.create(
+			deal=deal.name, organization_answers={}, contact_answers={}, address={}, confirm_duplicate=True
+		)
 		self.assertEqual(result["customer"], existing.name)
 		self.assertEqual(frappe.db.count("Customer", {"customer_name": org.name}), 1)
 
 	def test_sales_person_resolves_into_sales_team_row(self):
 		sp = frappe.get_doc(
-			{"doctype": "Sales Person", "sales_person_name": f"Test SP {_hash()}", "enabled": 1, "is_group": 0}
+			{
+				"doctype": "Sales Person",
+				"sales_person_name": f"Test SP {_hash()}",
+				"enabled": 1,
+				"is_group": 0,
+			}
 		).insert(ignore_permissions=True)
 		q = make_question(
 			target_doctype="Customer",
@@ -539,7 +600,13 @@ class TestErpnextCustomerCreate(CRMTestCase):
 				deal=deal.name,
 				organization_answers={},
 				contact_answers={},
-				address={"address_line1": "1 MG Road", "city": "Mumbai", "state": "Maharashtra", "country": "India", "gstin": gstin},
+				address={
+					"address_line1": "1 MG Road",
+					"city": "Mumbai",
+					"state": "Maharashtra",
+					"country": "India",
+					"gstin": gstin,
+				},
 			)
 		self.assertIn(holder.name, str(raised.exception))
 
@@ -551,9 +618,9 @@ class TestErpnextCustomerCreate(CRMTestCase):
 
 	def test_reusing_an_existing_customer_does_not_disable_it(self):
 		org = make_org()
-		existing = frappe.get_doc(
-			{"doctype": "Customer", "customer_name": org.name, "disabled": 0}
-		).insert(ignore_permissions=True)
+		existing = frappe.get_doc({"doctype": "Customer", "customer_name": org.name, "disabled": 0}).insert(
+			ignore_permissions=True
+		)
 		deal = make_deal(organization=org.name, contact=make_contact().name)
 
 		result = ec.create(
@@ -619,10 +686,21 @@ class TestErpnextCustomerCreate(CRMTestCase):
 			}
 		).insert(ignore_permissions=True)
 		auto_sp = frappe.get_doc(
-			{"doctype": "Sales Person", "sales_person_name": f"CW Auto {_hash()}", "employee": employee.name, "enabled": 1, "is_group": 0}
+			{
+				"doctype": "Sales Person",
+				"sales_person_name": f"CW Auto {_hash()}",
+				"employee": employee.name,
+				"enabled": 1,
+				"is_group": 0,
+			}
 		).insert(ignore_permissions=True)
 		question_sp = frappe.get_doc(
-			{"doctype": "Sales Person", "sales_person_name": f"CW Question {_hash()}", "enabled": 1, "is_group": 0}
+			{
+				"doctype": "Sales Person",
+				"sales_person_name": f"CW Question {_hash()}",
+				"enabled": 1,
+				"is_group": 0,
+			}
 		).insert(ignore_permissions=True)
 		q = make_question(
 			target_doctype="Customer",
@@ -636,7 +714,10 @@ class TestErpnextCustomerCreate(CRMTestCase):
 		deal = make_deal(organization=org.name, contact=make_contact().name)
 		frappe.set_user(user)
 		result = ec.create(
-			deal=deal.name, organization_answers={q.question_key: question_sp.name}, contact_answers={}, address={}
+			deal=deal.name,
+			organization_answers={q.question_key: question_sp.name},
+			contact_answers={},
+			address={},
 		)
 		customer = frappe.get_doc("Customer", result["customer"])
 		rows = {row.sales_person: row.allocated_percentage for row in customer.sales_team}
@@ -653,7 +734,12 @@ class TestErpnextCustomerCreate(CRMTestCase):
 		(here, nothing) rather than a fresh 100, or the save would blow past 100."""
 		org = make_org()
 		manual_sp = frappe.get_doc(
-			{"doctype": "Sales Person", "sales_person_name": f"CW Manual {_hash()}", "enabled": 1, "is_group": 0}
+			{
+				"doctype": "Sales Person",
+				"sales_person_name": f"CW Manual {_hash()}",
+				"enabled": 1,
+				"is_group": 0,
+			}
 		).insert(ignore_permissions=True)
 		new_sp = frappe.get_doc(
 			{"doctype": "Sales Person", "sales_person_name": f"CW New {_hash()}", "enabled": 1, "is_group": 0}
@@ -726,14 +812,18 @@ class TestSetupCustomerForDeal(CRMTestCase):
 			lead.name,
 			deal={"status": deal_status()},
 			setup_customer=True,
-			customer_address=frappe.as_json({"address_line1": "1 MG Road", "city": "Chennai", "country": "India", "gstin": "bad"}),
+			customer_address=frappe.as_json(
+				{"address_line1": "1 MG Road", "city": "Chennai", "country": "India", "gstin": "bad"}
+			),
 		)
 		self.assertTrue(response["customer_error"])
 		self.assertIsNone(response["customer"])
 
 		retry = setup_customer_for_deal(
 			response["deal"],
-			customer_address=frappe.as_json({"address_line1": "1 MG Road", "city": "Chennai", "state": "Tamil Nadu", "country": "India"}),
+			customer_address=frappe.as_json(
+				{"address_line1": "1 MG Road", "city": "Chennai", "state": "Tamil Nadu", "country": "India"}
+			),
 		)
 		self.assertIsNone(retry["customer_error"])
 		self.assertTrue(retry["customer"])
@@ -796,7 +886,7 @@ class TestSetupCustomerForDeal(CRMTestCase):
 
 
 class TestLookupGstin(CRMTestCase):
-	_used_gstins = []
+	_used_gstins: ClassVar[list] = []
 
 	def setUp(self):
 		frappe.set_user("Administrator")
@@ -830,7 +920,9 @@ class TestLookupGstin(CRMTestCase):
 				},
 			}
 		)
-		with patch("india_compliance.gst_india.utils.gstin_info.get_gstin_info", return_value=fake_response) as mocked:
+		with patch(
+			"india_compliance.gst_india.utils.gstin_info.get_gstin_info", return_value=fake_response
+		) as mocked:
 			result = self._lookup("33AAFCA7488L1Z0")
 
 		mocked.assert_called_once_with("33AAFCA7488L1Z0", throw_error=True)
@@ -847,7 +939,13 @@ class TestLookupGstin(CRMTestCase):
 			result = self._lookup("27AAAFU0939F1ZV")
 
 		self.assertEqual(result["business_name"], "Solo Trader")
-		self.assertEqual(result["address"], {k: ("India" if k == "country" else "") for k in ["address_line1", "address_line2", "city", "state", "pincode", "country"]})
+		self.assertEqual(
+			result["address"],
+			{
+				k: ("India" if k == "country" else "")
+				for k in ["address_line1", "address_line2", "city", "state", "pincode", "country"]
+			},
+		)
 
 	def test_permission_denied_without_customer_read(self):
 		user = make_user(roles=[], prefix="cw-gstin-noperm")
@@ -860,8 +958,12 @@ class TestLookupGstin(CRMTestCase):
 		a repeat lookup must not hit the external API again."""
 		from unittest.mock import patch
 
-		fake_response = frappe._dict({"business_name": "Cached Traders", "gst_category": "Registered Regular"})
-		with patch("india_compliance.gst_india.utils.gstin_info.get_gstin_info", return_value=fake_response) as mocked:
+		fake_response = frappe._dict(
+			{"business_name": "Cached Traders", "gst_category": "Registered Regular"}
+		)
+		with patch(
+			"india_compliance.gst_india.utils.gstin_info.get_gstin_info", return_value=fake_response
+		) as mocked:
 			first = self._lookup("19AABCU9603R1ZM")
 			second = self._lookup("19AABCU9603R1ZM")
 
@@ -897,7 +999,9 @@ class TestWizardContextIncludesAllQuestions(CRMTestCase):
 			question_key=f"_ctx_child_{_hash()}",
 			depends_on_question=parent.name,
 			depends_on_option="yes",
-			options=[{"option_label": "Regular", "option_value": "regular", "mapped_value": "Registered Regular"}],
+			options=[
+				{"option_label": "Regular", "option_value": "regular", "mapped_value": "Registered Regular"}
+			],
 		)
 
 		lead = make_lead()
@@ -906,6 +1010,8 @@ class TestWizardContextIncludesAllQuestions(CRMTestCase):
 		self.assertIn(parent.question_key, keys)
 		self.assertIn(child.question_key, keys)
 
-		child_payload = next(q for q in ctx["customer"]["organization_questions"] if q["question_key"] == child.question_key)
+		child_payload = next(
+			q for q in ctx["customer"]["organization_questions"] if q["question_key"] == child.question_key
+		)
 		self.assertEqual(child_payload["depends_on_question"], parent.name)
 		self.assertEqual(child_payload["depends_on_option"], "yes")

@@ -18,21 +18,21 @@ precacheAndRoute(self.__WB_MANIFEST)
 
 const isApi = ({ url }) => url.pathname.startsWith('/api/')
 for (const method of ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']) {
-  registerRoute(isApi, new NetworkOnly(), method)
+	registerRoute(isApi, new NetworkOnly(), method)
 }
 
 const SHELL_KEY = new URL('/deal_wizard/', self.location.origin).href
 registerRoute(
-  ({ request, url }) => request.mode === 'navigate' && url.pathname.startsWith('/deal_wizard'),
-  new NetworkFirst({
-    cacheName: 'pranera-crm-pages',
-    networkTimeoutSeconds: 5,
-    plugins: [
-      {
-        cacheKeyWillBeUsed: async () => SHELL_KEY,
-        cacheWillUpdate: async ({ response }) =>
-          response && response.status === 200 && !response.redirected ? response : null,
-      },
-    ],
-  }),
+	({ request, url }) => request.mode === 'navigate' && url.pathname.startsWith('/deal_wizard'),
+	new NetworkFirst({
+		cacheName: 'pranera-crm-pages',
+		networkTimeoutSeconds: 5,
+		plugins: [
+			{
+				cacheKeyWillBeUsed: async () => SHELL_KEY,
+				cacheWillUpdate: async ({ response }) =>
+					response && response.status === 200 && !response.redirected ? response : null,
+			},
+		],
+	})
 )

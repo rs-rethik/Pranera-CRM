@@ -77,9 +77,9 @@ class CustomerWizardMapping(Document):
 			)
 		if field.fieldtype in ("Table", "Table MultiSelect"):
 			frappe.throw(
-				_("{0}.{1} is a table field and can't be set directly; only \"sales_team\" on Customer is supported.").format(
-					doctype, fieldname
-				)
+				_(
+					'{0}.{1} is a table field and can\'t be set directly; only "sales_team" on Customer is supported.'
+				).format(doctype, fieldname)
 			)
 
 	def validate_options(self):
@@ -110,7 +110,9 @@ class CustomerWizardMapping(Document):
 		before the Deal even exists."""
 		if self.question_type != "Fixed":
 			return
-		self._validate_mapped_values(self.target_doctype, self.target_fieldname, "mapped_value", check_fallback=True)
+		self._validate_mapped_values(
+			self.target_doctype, self.target_fieldname, "mapped_value", check_fallback=True
+		)
 		if self.secondary_target_doctype:
 			self._validate_mapped_values(
 				self.secondary_target_doctype, self.secondary_target_fieldname, "secondary_mapped_value"
@@ -154,9 +156,10 @@ class CustomerWizardMapping(Document):
 			return
 		if not self.source_doctype:
 			frappe.throw(_("Source Doctype is required for a Dynamic question."))
-		if not frappe.get_meta(self.source_doctype).get_field(self.source_label_field or "name") and (
-			self.source_label_field or "name"
-		) != "name":
+		if (
+			not frappe.get_meta(self.source_doctype).get_field(self.source_label_field or "name")
+			and (self.source_label_field or "name") != "name"
+		):
 			frappe.throw(
 				_("{0} has no field {1}").format(self.source_doctype, frappe.bold(self.source_label_field))
 			)
@@ -176,21 +179,21 @@ class CustomerWizardMapping(Document):
 		if not self.depends_on_option:
 			frappe.throw(_("Only When Answer Is is required when Only After Question is set."))
 		if self.depends_on_operator not in (None, "Is", "Is not"):
-			frappe.throw(_("Match must be \"Is\" or \"Is not\"."))
+			frappe.throw(_('Match must be "Is" or "Is not".'))
 
 		parent = frappe.get_cached_doc("Customer Wizard Mapping", self.depends_on_question)
 		if parent.scope != self.scope:
 			frappe.throw(
-				_("{0} applies to {1}, but this question applies to {2}. A question can only depend on one in the same step.").format(
-					frappe.bold(self.depends_on_question), parent.scope, self.scope
-				)
+				_(
+					"{0} applies to {1}, but this question applies to {2}. A question can only depend on one in the same step."
+				).format(frappe.bold(self.depends_on_question), parent.scope, self.scope)
 			)
 
 		seen = {self.name}
 		node = parent
 		while node.depends_on_question:
 			if node.depends_on_question in seen:
-				frappe.throw(_("Circular dependency in \"Only After Question\"."))
+				frappe.throw(_('Circular dependency in "Only After Question".'))
 			seen.add(node.name)
 			node = frappe.get_cached_doc("Customer Wizard Mapping", node.depends_on_question)
 

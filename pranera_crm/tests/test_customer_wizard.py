@@ -1,6 +1,6 @@
 import frappe
-
 from crm.tests import CRMTestCase
+
 from pranera_crm import customer_wizard as cw
 
 
@@ -10,15 +10,19 @@ def _hash():
 
 def _make_user(roles):
 	email = f"pranera-cw-test-{_hash()}@example.com"
-	return frappe.get_doc(
-		{
-			"doctype": "User",
-			"email": email,
-			"first_name": "CW Test",
-			"send_welcome_email": 0,
-			"roles": [{"role": role} for role in roles],
-		}
-	).insert(ignore_permissions=True).name
+	return (
+		frappe.get_doc(
+			{
+				"doctype": "User",
+				"email": email,
+				"first_name": "CW Test",
+				"send_welcome_email": 0,
+				"roles": [{"role": role} for role in roles],
+			}
+		)
+		.insert(ignore_permissions=True)
+		.name
+	)
 
 
 def isolate_from_seed_questions():
@@ -71,7 +75,7 @@ class TestCustomerWizardResolution(CRMTestCase):
 		self.assertFalse(result["review"][0]["was_fallback"])
 
 	def test_single_option_auto_answers(self):
-		q = make_question(
+		make_question(
 			target_fieldname="payment_terms",
 			target_doctype="Customer",
 			options=[{"option_label": "Advance", "option_value": "advance", "mapped_value": "100% Advance"}],
@@ -81,7 +85,7 @@ class TestCustomerWizardResolution(CRMTestCase):
 		self.assertTrue(result["review"][0]["auto_answered"])
 
 	def test_fallback_when_unanswered(self):
-		q = make_question(
+		make_question(
 			fallback_value="Unregistered",
 			options=[
 				{"option_label": "Yes", "option_value": "yes", "mapped_value": "Registered Regular"},
@@ -127,10 +131,14 @@ class TestCustomerWizardResolution(CRMTestCase):
 		child = make_question(
 			depends_on_question=parent.name,
 			depends_on_option="yes",
-			options=[{"option_label": "Regular", "option_value": "regular", "mapped_value": "Registered Regular"}],
+			options=[
+				{"option_label": "Regular", "option_value": "regular", "mapped_value": "Registered Regular"}
+			],
 		)
 
-		self.assertEqual([q.question_key for q in cw.visible_questions("Organization", {})], [parent.question_key])
+		self.assertEqual(
+			[q.question_key for q in cw.visible_questions("Organization", {})], [parent.question_key]
+		)
 
 		visible = cw.visible_questions("Organization", {parent.question_key: "no"})
 		self.assertEqual([q.question_key for q in visible], [parent.question_key])
@@ -145,7 +153,11 @@ class TestCustomerWizardResolution(CRMTestCase):
 			sequence=1,
 			options=[
 				{"option_label": "Regular", "option_value": "regular", "mapped_value": "Registered Regular"},
-				{"option_label": "Composition", "option_value": "composition", "mapped_value": "Registered Composition"},
+				{
+					"option_label": "Composition",
+					"option_value": "composition",
+					"mapped_value": "Registered Composition",
+				},
 			],
 		)
 		q2 = make_question(
@@ -191,7 +203,7 @@ class TestCustomerWizardResolution(CRMTestCase):
 			question_type="Dynamic",
 			source_doctype="Country",
 			source_label_field="country_name",
-			source_filters='{"country_name": "{{ answers.%s }}"}' % territory_q.question_key,
+			source_filters=f'{{"country_name": "{{{{ answers.{territory_q.question_key} }}}}"}}',
 		)
 		options = cw.resolve_dynamic_options(country_q, {territory_q.question_key: "no-such-country"})
 		self.assertEqual(options, [])
@@ -242,7 +254,12 @@ class TestCustomerWizardMappingValidation(CRMTestCase):
 	def test_table_target_rejected_unless_sales_team(self):
 		with self.assertRaises(frappe.ValidationError):
 			make_question(target_doctype="Address", target_fieldname="links")
-		make_question(target_doctype="Customer", target_fieldname="sales_team", question_type="Dynamic", source_doctype="Country")
+		make_question(
+			target_doctype="Customer",
+			target_fieldname="sales_team",
+			question_type="Dynamic",
+			source_doctype="Country",
+		)
 
 	def test_fixed_question_needs_an_option(self):
 		with self.assertRaises(frappe.ValidationError):
@@ -255,7 +272,9 @@ class TestCustomerWizardMappingValidation(CRMTestCase):
 	def test_depends_on_option_required_with_depends_on_question(self):
 		parent = make_question(options=[{"option_label": "Yes", "option_value": "yes"}])
 		with self.assertRaises(frappe.ValidationError):
-			make_question(depends_on_question=parent.name, options=[{"option_label": "A", "option_value": "a"}])
+			make_question(
+				depends_on_question=parent.name, options=[{"option_label": "A", "option_value": "a"}]
+			)
 
 	def test_depends_on_question_must_share_scope(self):
 		parent = make_question(scope="Organization", options=[{"option_label": "Yes", "option_value": "yes"}])
@@ -314,18 +333,28 @@ class TestCustomerWizardMappingValidation(CRMTestCase):
 			make_question(
 				target_doctype="Customer",
 				target_fieldname="territory",
-				options=[{"option_label": "Nowhere", "option_value": "nowhere", "mapped_value": "Not A Real Territory"}],
+				options=[
+					{
+						"option_label": "Nowhere",
+						"option_value": "nowhere",
+						"mapped_value": "Not A Real Territory",
+					}
+				],
 			)
 
 	def test_mapping_with_invalid_select_value_rejected_at_save(self):
 		with self.assertRaises(frappe.ValidationError):
-			make_question(options=[{"option_label": "Bad", "option_value": "bad", "mapped_value": "Not A GST Category"}])
+			make_question(
+				options=[{"option_label": "Bad", "option_value": "bad", "mapped_value": "Not A GST Category"}]
+			)
 
 	def test_mapping_with_bad_fallback_value_rejected_at_save(self):
 		with self.assertRaises(frappe.ValidationError):
 			make_question(
 				fallback_value="Not A GST Category",
-				options=[{"option_label": "Yes", "option_value": "yes", "mapped_value": "Registered Regular"}],
+				options=[
+					{"option_label": "Yes", "option_value": "yes", "mapped_value": "Registered Regular"}
+				],
 			)
 
 	def test_mapping_with_bad_secondary_mapped_value_rejected_at_save(self):
@@ -335,7 +364,14 @@ class TestCustomerWizardMappingValidation(CRMTestCase):
 				target_fieldname="territory",
 				secondary_target_doctype="Customer",
 				secondary_target_fieldname="territory",
-				options=[{"option_label": "India", "option_value": "india", "mapped_value": "India", "secondary_mapped_value": "Not A Real Territory"}],
+				options=[
+					{
+						"option_label": "India",
+						"option_value": "india",
+						"mapped_value": "India",
+						"secondary_mapped_value": "Not A Real Territory",
+					}
+				],
 			)
 
 	def test_mapping_with_valid_master_values_saves_fine(self):
@@ -393,7 +429,9 @@ class TestMandatoryAndOperatorRules(CRMTestCase):
 			depends_on_operator="Is not",
 			options=[{"option_label": "Overseas", "option_value": "overseas", "mapped_value": "Overseas"}],
 		)
-		result = cw.resolve("Organization", {parent.question_key: "elsewhere", child.question_key: "overseas"})
+		result = cw.resolve(
+			"Organization", {parent.question_key: "elsewhere", child.question_key: "overseas"}
+		)
 		self.assertEqual(result["fields"]["Customer"]["gst_category"], "Overseas")
 		result = cw.resolve("Organization", {parent.question_key: "india", child.question_key: "overseas"})
 		self.assertNotIn("Customer", result["fields"])
@@ -427,7 +465,12 @@ class TestMandatoryAndOperatorRules(CRMTestCase):
 		q = make_question(
 			is_mandatory=1,
 			options=[
-				{"option_label": "Only", "option_value": "only", "mapped_value": "Unregistered", "is_default": 1},
+				{
+					"option_label": "Only",
+					"option_value": "only",
+					"mapped_value": "Unregistered",
+					"is_default": 1,
+				},
 				{"option_label": "Other", "option_value": "other", "mapped_value": "Registered Regular"},
 			],
 		)
@@ -471,7 +514,9 @@ class TestMandatoryAndOperatorRules(CRMTestCase):
 		q = make_question(
 			target_doctype="Customer",
 			target_fieldname="customer_group",
-			options=[{"option_label": "Commercial", "option_value": "commercial", "mapped_value": "Commercial"}],
+			options=[
+				{"option_label": "Commercial", "option_value": "commercial", "mapped_value": "Commercial"}
+			],
 		)
 		payload = cw.question_payload(q, {})
 		self.assertEqual(payload["target_label"], "Customer Group")
@@ -531,7 +576,7 @@ class TestBridgeAwareness(CRMTestCase):
 				{"option_label": "B", "option_value": "b", "mapped_value": "Unregistered"},
 			],
 		)
-		always_q = make_question(
+		make_question(
 			requires_erpnext_bridge=0,
 			target_doctype="Customer",
 			target_fieldname="territory",
@@ -564,7 +609,12 @@ class TestSecondaryTarget(CRMTestCase):
 			secondary_target_doctype="Customer",
 			secondary_target_fieldname="territory",
 			options=[
-				{"option_label": "India", "option_value": "india", "mapped_value": "India", "secondary_mapped_value": "India"},
+				{
+					"option_label": "India",
+					"option_value": "india",
+					"mapped_value": "India",
+					"secondary_mapped_value": "India",
+				},
 			],
 		)
 		result = cw.resolve("Organization", {q.question_key: "india"})
@@ -604,7 +654,12 @@ class TestSecondaryTarget(CRMTestCase):
 			secondary_target_fieldname="territory",
 			override_roles="Sales Manager",
 			options=[
-				{"option_label": "India", "option_value": "india", "mapped_value": "India", "secondary_mapped_value": "India"},
+				{
+					"option_label": "India",
+					"option_value": "india",
+					"mapped_value": "India",
+					"secondary_mapped_value": "India",
+				},
 			],
 		)
 		manager = _make_user(roles=["Sales Manager"])
@@ -631,7 +686,9 @@ class TestDisabledQuestionVisibility(CRMTestCase):
 		frappe.db.rollback()
 
 	def test_disabled_question_is_never_visible(self):
-		q = make_question(options=[{"option_label": "Yes", "option_value": "yes", "mapped_value": "Registered Regular"}])
+		q = make_question(
+			options=[{"option_label": "Yes", "option_value": "yes", "mapped_value": "Registered Regular"}]
+		)
 		frappe.db.set_value("Customer Wizard Mapping", q.name, "enabled", 0)
 		frappe.clear_cache(doctype="Customer Wizard Mapping")
 		self.assertFalse(cw.is_visible(frappe.get_cached_doc("Customer Wizard Mapping", q.name), {}))
@@ -640,12 +697,14 @@ class TestDisabledQuestionVisibility(CRMTestCase):
 		parent = make_question(
 			options=[{"option_label": "Yes", "option_value": "yes", "mapped_value": None, "is_default": 1}]
 		)
-		child = make_question(
+		make_question(
 			target_doctype="Customer",
 			target_fieldname="gst_category",
 			depends_on_question=parent.name,
 			depends_on_option="yes",
-			options=[{"option_label": "Regular", "option_value": "regular", "mapped_value": "Registered Regular"}],
+			options=[
+				{"option_label": "Regular", "option_value": "regular", "mapped_value": "Registered Regular"}
+			],
 		)
 		result = cw.resolve("Organization", {})
 		self.assertEqual(result["fields"]["Customer"]["gst_category"], "Registered Regular")
@@ -703,4 +762,6 @@ class TestCustomerWizardMappingPermissions(CRMTestCase):
 	def test_system_manager_can_still_edit_mapping(self):
 		user = _make_user(roles=["System Manager"])
 		frappe.set_user(user)
-		make_question(options=[{"option_label": "Yes", "option_value": "yes", "mapped_value": "Registered Regular"}])
+		make_question(
+			options=[{"option_label": "Yes", "option_value": "yes", "mapped_value": "Registered Regular"}]
+		)

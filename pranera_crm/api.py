@@ -9,12 +9,12 @@ the ability to edit the data a *new* Organization / Contact is built from.
 from urllib.parse import urlparse
 
 import frappe
-from frappe import _
-from frappe.utils import cint
-
 from crm.fcrm.doctype.crm_fields_layout.crm_fields_layout import get_fields_layout
 from crm.fcrm.doctype.crm_lead.crm_lead import LEAD_DEAL_FIELD_MAP as CRM_LEAD_DEAL_FIELD_MAP
 from crm.fcrm.doctype.crm_lead.crm_lead import convert_to_deal, is_custom_field
+from frappe import _
+from frappe.utils import cint
+
 from pranera_crm import customer_wizard as cw
 from pranera_crm import erpnext_customer
 from pranera_crm.email_verification import ensure_verified
@@ -76,7 +76,7 @@ class LeadAlreadyConverted(frappe.ValidationError):
 
 
 class WizardDisabled(frappe.ValidationError):
-	""""Enable Convert to Deal Wizard" is off in CRM Settings: CRM's own flow applies."""
+	""" "Enable Convert to Deal Wizard" is off in CRM Settings: CRM's own flow applies."""
 
 
 def _ensure_enabled():
@@ -164,9 +164,7 @@ def search_candidates(
 	)
 
 
-def find_candidates(
-	organization=None, website=None, email=None, phone=None, mobile_no=None
-) -> dict:
+def find_candidates(organization=None, website=None, email=None, phone=None, mobile_no=None) -> dict:
 	"""Existing Organizations / Contacts that look like the lead.
 
 	``auto_organization`` / ``auto_contact`` are what CRM's ``convert_to_deal``
@@ -178,7 +176,9 @@ def find_candidates(
 
 	auto_organization = None
 	if organization:
-		rows = frappe.get_list(ORGANIZATION, filters={"organization_name": organization}, pluck="name", limit=1)
+		rows = frappe.get_list(
+			ORGANIZATION, filters={"organization_name": organization}, pluck="name", limit=1
+		)
 		auto_organization = rows[0] if rows else None
 
 	return {
@@ -339,12 +339,22 @@ def convert(
 	org_result = (
 		None
 		if existing_organization
-		else cw.resolve("Organization", _parse_dict(customer_answers), _parse_dict(customer_overrides), include_bridge_questions=include_bridge)
+		else cw.resolve(
+			"Organization",
+			_parse_dict(customer_answers),
+			_parse_dict(customer_overrides),
+			include_bridge_questions=include_bridge,
+		)
 	)
 	contact_result = (
 		None
 		if existing_contact
-		else cw.resolve("Contact", _parse_dict(contact_customer_answers), _parse_dict(customer_overrides), include_bridge_questions=include_bridge)
+		else cw.resolve(
+			"Contact",
+			_parse_dict(contact_customer_answers),
+			_parse_dict(customer_overrides),
+			include_bridge_questions=include_bridge,
+		)
 	)
 
 	updates = _parse_dict(lead_updates)
@@ -470,13 +480,15 @@ def _run_customer_setup(
 		frappe.db.rollback(save_point=save_point)
 		result["duplicate_customer"] = e.existing_customer
 		return result
-	except Exception as e:  # noqa: BLE001 - deliberately broad: never let this undo the Deal conversion
+	except Exception as e:
 		frappe.db.rollback(save_point=save_point)
 		frappe.log_error(title="Pranera CRM: ERPNext customer setup failed")
 		if isinstance(e, frappe.ValidationError):
 			result["customer_error"] = frappe.utils.strip_html(str(e))
 		else:
-			result["customer_error"] = _("Could not set up the ERPNext customer. Please try again from the deal.")
+			result["customer_error"] = _(
+				"Could not set up the ERPNext customer. Please try again from the deal."
+			)
 		return result
 
 	frappe.db.release_savepoint(save_point)
@@ -535,9 +547,7 @@ def _check_required_deal_fields(lead_doc, layout_fields, deal_values):
 			missing.append(_(field.label or field.fieldname))
 
 	if missing:
-		frappe.throw(
-			_("Missing required Deal fields: {0}").format(", ".join(missing)), frappe.MandatoryError
-		)
+		frappe.throw(_("Missing required Deal fields: {0}").format(", ".join(missing)), frappe.MandatoryError)
 
 
 def _apply_lead_updates(lead_doc, lead_updates, skip_organization, skip_contact):

@@ -13,10 +13,9 @@ Frappe hands page renderers that *resolved* endpoint, not the raw URL.
 
 import os
 
-from werkzeug.wrappers import Response
-
 import frappe
 from frappe.website.page_renderers.base_renderer import BaseRenderer
+from werkzeug.wrappers import Response
 
 ENDPOINT = "deal_wizard_sw"
 SCOPE = "/deal_wizard/"

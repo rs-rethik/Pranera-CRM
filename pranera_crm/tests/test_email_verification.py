@@ -1,8 +1,8 @@
 from unittest.mock import patch
 
 import frappe
-
 from crm.tests import CRMTestCase
+
 from pranera_crm import email_verification as ev
 from pranera_crm.api import convert
 from pranera_crm.tests.test_api import deal_status, make_contact, make_lead, make_user
