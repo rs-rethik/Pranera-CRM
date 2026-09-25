@@ -17,10 +17,10 @@ def execute():
 	group.depends_on_question = "customer_type"
 	group.depends_on_option = "individual"
 	group.depends_on_operator = "Is not"
-	group.save(ignore_permissions=True)
+	group.save()
 
 	if not frappe.db.exists("Customer Wizard Mapping", "customer_group_individual"):
 		path = frappe.get_app_path("pranera_crm", "data", "customer_wizard_mapping_seed.json")
 		with open(path) as f:
 			row = next(r for r in json.load(f) if r["name"] == "customer_group_individual")
-		frappe.get_doc(row).insert(ignore_permissions=True)
+		frappe.get_doc(row).insert()

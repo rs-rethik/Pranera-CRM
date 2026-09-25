@@ -89,7 +89,7 @@ def ensure_payment_terms_template():
 				}
 			],
 		}
-	).insert(ignore_permissions=True)
+	).insert()
 
 
 def ensure_territories():
@@ -103,11 +103,9 @@ def ensure_territories():
 	first time this question resolves to "India"."""
 	for name in ("India", "Rest Of The World"):
 		if not frappe.db.exists("CRM Territory", name):
-			frappe.get_doc({"doctype": "CRM Territory", "territory_name": name}).insert(
-				ignore_permissions=True
-			)
+			frappe.get_doc({"doctype": "CRM Territory", "territory_name": name}).insert()
 		if not frappe.db.exists("Territory", name):
-			frappe.get_doc({"doctype": "Territory", "territory_name": name}).insert(ignore_permissions=True)
+			frappe.get_doc({"doctype": "Territory", "territory_name": name}).insert()
 
 
 def ensure_customer_wizard_questions():
@@ -133,7 +131,7 @@ def ensure_customer_wizard_questions():
 	for row in rows:
 		if frappe.db.exists("Customer Wizard Mapping", row["name"]):
 			continue
-		frappe.get_doc(row).insert(ignore_permissions=True)
+		frappe.get_doc(row).insert()
 
 
 def ensure_erpnext_customer_sync_disabled():
@@ -162,4 +160,4 @@ def remove_sales_person_question():
 	up the row a site installed before this change shipped — a fresh install never
 	creates it in the first place, since it's no longer in the fixture."""
 	if frappe.db.exists("Customer Wizard Mapping", "sales_person"):
-		frappe.delete_doc("Customer Wizard Mapping", "sales_person", ignore_permissions=True, force=True)
+		frappe.delete_doc("Customer Wizard Mapping", "sales_person", force=True)
