@@ -175,3 +175,15 @@ class TestHooksLogInsteadOfFailing(CRMTestCase):
 			setup.before_migrate()
 
 		log_error.assert_called_once()
+
+	def test_after_install_and_after_migrate_log_even_if_the_step_runner_breaks(self):
+		from unittest.mock import patch
+
+		for hook in (setup.after_install, setup.after_migrate):
+			with (
+				patch.object(setup, "_run_safely", side_effect=Exception("runner broke")),
+				patch("frappe.log_error") as log_error,
+			):
+				hook()
+			log_error.assert_called_once()
+			self.assertIn(hook.__name__, log_error.call_args.kwargs["title"])

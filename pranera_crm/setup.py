@@ -33,28 +33,34 @@ def before_migrate():
 
 
 def after_install():
-	for step in (
-		ensure_default,
-		ensure_payment_terms_template,
-		ensure_territories,
-		ensure_customer_wizard_questions,
-		ensure_erpnext_customer_sync_disabled,
-		remove_sales_person_question,
-	):
-		_run_safely(step)
+	try:
+		for step in (
+			ensure_default,
+			ensure_payment_terms_template,
+			ensure_territories,
+			ensure_customer_wizard_questions,
+			ensure_erpnext_customer_sync_disabled,
+			remove_sales_person_question,
+		):
+			_run_safely(step)
+	except Exception:
+		frappe.log_error(title="Pranera CRM: after_install failed")
 
 
 def after_migrate():
-	for step in (
-		restore_form_script_enabled_state,
-		ensure_default,
-		ensure_payment_terms_template,
-		ensure_territories,
-		ensure_customer_wizard_questions,
-		ensure_erpnext_customer_sync_disabled,
-		remove_sales_person_question,
-	):
-		_run_safely(step)
+	try:
+		for step in (
+			restore_form_script_enabled_state,
+			ensure_default,
+			ensure_payment_terms_template,
+			ensure_territories,
+			ensure_customer_wizard_questions,
+			ensure_erpnext_customer_sync_disabled,
+			remove_sales_person_question,
+		):
+			_run_safely(step)
+	except Exception:
+		frappe.log_error(title="Pranera CRM: after_migrate failed")
 
 
 def restore_form_script_enabled_state():
