@@ -74,10 +74,10 @@
   },
   {
    "default": "1",
-   "description": "Tick to ask only when ERPNext customer setup is on. Untick to always ask, e.g. Territory or Industry.",
+   "description": "Tick for answers saved on the ERPNext Customer, Address or Contact. Untick to always ask, e.g. Territory or Industry.",
    "fieldname": "requires_erpnext_bridge",
    "fieldtype": "Check",
-   "label": "Requires ERPNext Bridge"
+   "label": "Ask Only If ERPNext Is Enabled"
   },
   {
    "default": "1",
@@ -94,15 +94,15 @@
   {
    "description": "Where the answer is saved.",
    "fieldname": "target_doctype",
-   "fieldtype": "Select",
+   "fieldtype": "Link",
    "label": "Target Doctype",
-   "options": "Customer\nAddress\nContact\nCRM Lead",
+   "options": "DocType",
    "reqd": 1
   },
   {
    "description": "The field that gets the answer, e.g. gst_category. For a Sales Person question, use sales_team on Customer.",
    "fieldname": "target_fieldname",
-   "fieldtype": "Data",
+   "fieldtype": "Autocomplete",
    "label": "Target Fieldname",
    "reqd": 1
   },
@@ -124,15 +124,15 @@
   {
    "description": "Optional. Save the same answer on a second field too. Each answer then needs a Secondary Assigned Value.",
    "fieldname": "secondary_target_doctype",
-   "fieldtype": "Select",
+   "fieldtype": "Link",
    "label": "Secondary Target Doctype",
-   "options": "\nCustomer\nAddress\nContact\nCRM Lead"
+   "options": "DocType"
   },
   {
    "depends_on": "eval:doc.secondary_target_doctype",
    "description": "The field on that doctype.",
    "fieldname": "secondary_target_fieldname",
-   "fieldtype": "Data",
+   "fieldtype": "Autocomplete",
    "label": "Secondary Target Fieldname"
   },
   {
@@ -237,15 +237,16 @@
    "label": "Review Step Override"
   },
   {
-   "description": "Roles that can change the value on the Review step, one per line. Leave empty to allow nobody.",
+   "description": "Roles that can change the value on the Review step. Leave empty to allow nobody.",
    "fieldname": "override_roles",
-   "fieldtype": "Small Text",
-   "label": "Override Allowed For Roles"
+   "fieldtype": "Table MultiSelect",
+   "label": "Override Allowed For Roles",
+   "options": "Customer Wizard Mapping Role"
   }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-09-22 12:00:00.000000",
+ "modified": "2026-09-25 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Pranera CRM",
  "name": "Customer Wizard Mapping",

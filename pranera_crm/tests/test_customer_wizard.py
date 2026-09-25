@@ -225,7 +225,7 @@ class TestCustomerWizardResolution(CRMTestCase):
 	def test_override_requires_configured_role(self):
 		q = make_question(
 			options=[{"option_label": "Yes", "option_value": "yes", "mapped_value": "Registered Regular"}],
-			override_roles="Sales Manager",
+			override_roles=[{"role": "Sales Manager"}],
 		)
 		plain_user = _make_user(roles=["Sales User"])
 		manager_user = _make_user(roles=["Sales Manager"])
@@ -292,7 +292,7 @@ class TestCustomerWizardMappingValidation(CRMTestCase):
 		with self.assertRaises(frappe.ValidationError):
 			make_question(
 				options=[{"option_label": "Yes", "option_value": "yes"}],
-				override_roles="Not A Real Role",
+				override_roles=[{"role": "Not A Real Role"}],
 			)
 
 	def test_secondary_target_requires_both_doctype_and_fieldname(self):
@@ -652,7 +652,7 @@ class TestSecondaryTarget(CRMTestCase):
 			target_fieldname="territory",
 			secondary_target_doctype="Customer",
 			secondary_target_fieldname="territory",
-			override_roles="Sales Manager",
+			override_roles=[{"role": "Sales Manager"}],
 			options=[
 				{
 					"option_label": "India",

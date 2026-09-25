@@ -69,6 +69,8 @@ Open a Lead in CRM and click **Convert to Deal**, or go to `/deal_wizard/<lead n
 | **Customer Wizard Mapping** | The questions, answers and the field values they set. Editable by System Manager only; edits survive `bench migrate`. |
 | **Email Account** | A default outgoing account, needed to send verification codes. |
 
+In the form, the target doctype is limited to Customer, Address, Contact and CRM Lead, the target fieldname is picked from that doctype's fields, and override roles are a multiselect.
+
 A Customer Wizard Mapping row defines a question, its answers (each with the value it writes), the target
 field, optional branching (`depends_on_question`), an optional secondary target, mandatory/fallback rules, and
 which roles may override the result on the Review step. Fixed questions list curated answers; Dynamic

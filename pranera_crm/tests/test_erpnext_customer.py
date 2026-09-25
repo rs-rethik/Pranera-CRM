@@ -214,7 +214,7 @@ class TestConvertWithCustomerSetup(CRMTestCase):
 			options=[
 				{"option_label": "Commercial", "option_value": "commercial", "mapped_value": "Commercial"}
 			],
-			override_roles="Sales Manager",
+			override_roles=[{"role": "Sales Manager"}],
 		)
 		user = make_user(roles=["Sales User", "Sales Manager"])
 		frappe.set_user(user)

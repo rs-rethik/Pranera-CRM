@@ -1,6 +1,8 @@
 import frappe
 from crm.tests import CRMTestCase
 
+from pranera_crm.pranera_crm.doctype.customer_wizard_mapping.customer_wizard_mapping import get_target_fields
+
 OPTION = {"option_label": "Yes", "option_value": "yes", "mapped_value": "Registered Regular"}
 
 
@@ -122,12 +124,15 @@ class TestCustomerWizardMapping(CRMTestCase):
 			new_mapping(fallback_value="Not A GST Category").insert()
 		new_mapping(fallback_value="Unregistered").insert()
 
-	def test_override_roles_are_normalised_and_checked(self):
-		doc = new_mapping(override_roles="  System Manager \n\n Sales Manager  ").insert()
-		self.assertEqual(doc.override_roles, "System Manager\nSales Manager")
+	def test_override_roles_are_a_multiselect_of_real_roles(self):
+		doc = new_mapping(override_roles=[{"role": "System Manager"}, {"role": "Sales Manager"}]).insert()
 		self.assertEqual(doc.get_override_roles(), ["System Manager", "Sales Manager"])
 		with self.assertRaises(frappe.ValidationError):
-			new_mapping(override_roles="Not A Real Role").insert()
+			new_mapping(override_roles=[{"role": "Not A Real Role"}]).insert()
+
+	def test_duplicate_override_roles_collapse(self):
+		doc = new_mapping(override_roles=[{"role": "Sales Manager"}, {"role": "Sales Manager"}]).insert()
+		self.assertEqual(doc.get_override_roles(), ["Sales Manager"])
 
 	def test_no_override_roles_means_an_empty_list(self):
 		self.assertEqual(new_mapping().insert().get_override_roles(), [])
@@ -166,3 +171,63 @@ class TestCustomerWizardMapping(CRMTestCase):
 		first.depends_on_option = "yes"
 		with self.assertRaises(frappe.ValidationError):
 			first.save()
+
+
+class TestTargetPickers(CRMTestCase):
+	def setUp(self):
+		frappe.set_user("Administrator")
+
+	def tearDown(self):
+		frappe.set_user("Administrator")
+		frappe.db.rollback()
+
+	def test_doctype_outside_the_allowed_four_is_rejected(self):
+		with self.assertRaises(frappe.ValidationError):
+			new_mapping(target_doctype="User", target_fieldname="first_name").insert()
+		with self.assertRaises(frappe.ValidationError):
+			new_mapping(secondary_target_doctype="User", secondary_target_fieldname="first_name").insert()
+
+	def test_all_four_doctypes_are_accepted(self):
+		for doctype, fieldname in (
+			("Customer", "territory"),
+			("Address", "gst_category"),
+			("Contact", "designation"),
+			("CRM Lead", "territory"),
+		):
+			options = [{**OPTION, "mapped_value": None}]
+			new_mapping(target_doctype=doctype, target_fieldname=fieldname, options=options).insert()
+
+	def test_get_target_fields_lists_real_settable_fields_with_labels(self):
+		fields = {f["value"]: f["label"] for f in get_target_fields("Customer")}
+		self.assertIn("territory", fields)
+		self.assertIn("territory", fields["territory"].lower())
+		self.assertIn("sales_team", fields)
+		meta = frappe.get_meta("Customer")
+		for fieldname in fields:
+			if fieldname == "sales_team":
+				continue
+			self.assertNotIn(
+				meta.get_field(fieldname).fieldtype, ("Section Break", "Column Break", "Tab Break", "Table")
+			)
+
+	def test_every_seeded_target_is_offered_by_the_picker(self):
+		import json
+
+		path = frappe.get_app_path("pranera_crm", "data", "customer_wizard_mapping_seed.json")
+		with open(path) as f:
+			rows = json.load(f)
+		for row in rows:
+			offered = {f["value"] for f in get_target_fields(row["target_doctype"])}
+			self.assertIn(row["target_fieldname"], offered, row["name"])
+			if row.get("secondary_target_doctype"):
+				offered = {f["value"] for f in get_target_fields(row["secondary_target_doctype"])}
+				self.assertIn(row["secondary_target_fieldname"], offered, row["name"])
+
+	def test_get_target_fields_rejects_other_doctypes_and_unauthorised_users(self):
+		with self.assertRaises(frappe.ValidationError):
+			get_target_fields("User")
+		from pranera_crm.tests.test_api import make_user
+
+		frappe.set_user(make_user(roles=[], prefix="cw-picker"))
+		with self.assertRaises(frappe.PermissionError):
+			get_target_fields("Customer")

@@ -31,7 +31,7 @@
   "depends_on_option": "individual",
   "depends_on_operator": "Is not",
   "sequence": 20,
-  "override_roles": "System Manager\nSales Manager",
+  "override_roles": [{"role": "System Manager"}, {"role": "Sales Manager"}],
   "options": [
    {"option_label": "Business (Wholesale / Retail / Distributor)", "option_value": "business", "mapped_value": "Commercial"},
    {"option_label": "Government", "option_value": "government", "mapped_value": "Government"},
@@ -53,7 +53,7 @@
   "depends_on_option": "individual",
   "depends_on_operator": "Is",
   "sequence": 21,
-  "override_roles": "System Manager\nSales Manager",
+  "override_roles": [{"role": "System Manager"}, {"role": "Sales Manager"}],
   "options": [
    {"option_label": "Individual", "option_value": "individual", "mapped_value": "Individual"}
   ]
@@ -72,7 +72,7 @@
   "secondary_target_fieldname": "territory",
   "question_type": "Fixed",
   "sequence": 30,
-  "override_roles": "System Manager\nSales Manager",
+  "override_roles": [{"role": "System Manager"}, {"role": "Sales Manager"}],
   "options": [
    {"option_label": "Tamil Nadu", "option_value": "tamil_nadu", "mapped_value": "India", "secondary_mapped_value": "India"},
    {"option_label": "Other Indian State", "option_value": "other_india", "mapped_value": "India", "secondary_mapped_value": "India"},
@@ -181,7 +181,7 @@
   "depends_on_question": "gst_registered",
   "depends_on_option": "yes",
   "sequence": 6,
-  "override_roles": "System Manager\nSales Manager",
+  "override_roles": [{"role": "System Manager"}, {"role": "Sales Manager"}],
   "options": [
    {"option_label": "Regular", "option_value": "regular", "mapped_value": "Registered Regular", "is_default": 1},
    {"option_label": "Composition", "option_value": "composition", "mapped_value": "Registered Composition", "secondary_mapped_value": "Registered Composition"}
@@ -201,7 +201,7 @@
   "depends_on_question": "gst_registered",
   "depends_on_option": "yes",
   "sequence": 7,
-  "override_roles": "System Manager\nSales Manager",
+  "override_roles": [{"role": "System Manager"}, {"role": "Sales Manager"}],
   "options": [
    {"option_label": "Yes", "option_value": "yes", "mapped_value": "SEZ"},
    {"option_label": "No", "option_value": "no", "is_default": 1}
