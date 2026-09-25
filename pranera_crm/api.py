@@ -138,7 +138,7 @@ def get_wizard_context(lead: str) -> dict:
 		"contact_fields": field_meta(LEAD, CONTACT_FIELDS),
 		"deal_layout": layout,
 		"deal_defaults": _deal_defaults(doc, layout_fields),
-		"deal_statuses": frappe.get_all(
+		"deal_statuses": frappe.get_list(
 			"CRM Deal Status",
 			fields=["name", "color", "type", "position"],
 			order_by="position asc",

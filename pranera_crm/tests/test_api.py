@@ -351,6 +351,18 @@ class TestWizardContext(CRMTestCase):
 		self.assertEqual(ctx["candidates"]["contacts"][0]["name"], contact.name)
 		self.assertEqual(ctx["candidates"]["auto_contact"], contact.name)
 
+	def test_deal_statuses_are_read_with_the_users_permissions(self):
+		from unittest.mock import patch
+
+		user = make_user(roles=["Sales User"], prefix="cw-status")
+		lead = make_lead(lead_owner=user)
+		frappe.set_user(user)
+		with patch("frappe.get_all", wraps=frappe.get_all) as unfiltered:
+			ctx = get_wizard_context(lead.name)
+		self.assertTrue(ctx["deal_statuses"])
+		self.assertNotIn("CRM Deal Status", [c.args[0] for c in unfiltered.call_args_list if c.args])
+		self.assertNotIn("CRM Deal Status", [c.kwargs.get("doctype") for c in unfiltered.call_args_list])
+
 	def test_context_reports_converted(self):
 		frappe.set_user("Administrator")
 		lead = make_lead()
