@@ -598,32 +598,17 @@ class TestDealWizardPage(CRMTestCase):
 	def tearDown(self):
 		frappe.db.rollback()
 
-	def test_context_carries_the_boot_data(self):
+	def test_context_carries_the_boot_data_and_requests_a_commit(self):
 		from unittest.mock import patch
 
 		from pranera_crm.www.deal_wizard import get_context
 
+		frappe.local.flags.commit = False
 		with patch("frappe.db.commit") as commit:
 			context = get_context(frappe._dict())
-		commit.assert_called_once()
+		commit.assert_not_called()
 		self.assertEqual(context.boot["pranera_user"], "Administrator")
-
-	def test_a_failed_commit_is_rolled_back_logged_and_raised(self):
-		from unittest.mock import patch
-
-		from pranera_crm.www.deal_wizard import get_context
-
-		with (
-			patch("frappe.db.commit", side_effect=Exception("db gone")),
-			patch("frappe.db.rollback") as rollback,
-			patch("frappe.log_error") as log_error,
-			self.assertRaises(Exception) as raised,
-		):
-			get_context(frappe._dict())
-
-		self.assertEqual(str(raised.exception), "db gone")
-		rollback.assert_called_once()
-		log_error.assert_called_once()
+		self.assertTrue(frappe.local.flags.commit)
 
 
 class TestSiteProperties(CRMTestCase):
