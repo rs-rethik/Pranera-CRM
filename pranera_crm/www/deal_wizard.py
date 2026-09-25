@@ -25,7 +25,13 @@ def get_context(context):
 	if not is_wizard_enabled():
 		redirect_to(crm_url_for_request())
 
-	frappe.db.commit()
+	try:
+		frappe.db.commit()
+	except Exception:
+		frappe.db.rollback()
+		frappe.log_error(title="Pranera CRM: could not save the wizard session")
+		raise
+
 	context.boot = get_boot()
 	return context
 
