@@ -10,33 +10,51 @@ FORM_SCRIPT = "Pranera Convert Wizard"
 _form_script_enabled_before_sync = {}
 
 
+def _run_safely(step):
+	"""Run one install/migrate step; a failure is logged to Error Log and never
+	stops the remaining steps (or the whole `bench migrate`)."""
+	try:
+		step()
+	except Exception:
+		frappe.log_error(title=f"Pranera CRM: {step.__name__} failed")
+
+
 def before_migrate():
 	"""Capture the Form Script's current `enabled` state before fixture sync (which
 	runs later in this same `bench migrate`) unconditionally resets it back to the
 	shipped default — see `restore_form_script_enabled_state`."""
-	if frappe.db.exists("CRM Form Script", FORM_SCRIPT):
-		_form_script_enabled_before_sync["enabled"] = frappe.db.get_value(
-			"CRM Form Script", FORM_SCRIPT, "enabled"
-		)
+	try:
+		if frappe.db.exists("CRM Form Script", FORM_SCRIPT):
+			_form_script_enabled_before_sync["enabled"] = frappe.db.get_value(
+				"CRM Form Script", FORM_SCRIPT, "enabled"
+			)
+	except Exception:
+		frappe.log_error(title="Pranera CRM: before_migrate failed")
 
 
 def after_install():
-	ensure_default()
-	ensure_payment_terms_template()
-	ensure_territories()
-	ensure_customer_wizard_questions()
-	ensure_erpnext_customer_sync_disabled()
-	remove_sales_person_question()
+	for step in (
+		ensure_default,
+		ensure_payment_terms_template,
+		ensure_territories,
+		ensure_customer_wizard_questions,
+		ensure_erpnext_customer_sync_disabled,
+		remove_sales_person_question,
+	):
+		_run_safely(step)
 
 
 def after_migrate():
-	restore_form_script_enabled_state()
-	ensure_default()
-	ensure_payment_terms_template()
-	ensure_territories()
-	ensure_customer_wizard_questions()
-	ensure_erpnext_customer_sync_disabled()
-	remove_sales_person_question()
+	for step in (
+		restore_form_script_enabled_state,
+		ensure_default,
+		ensure_payment_terms_template,
+		ensure_territories,
+		ensure_customer_wizard_questions,
+		ensure_erpnext_customer_sync_disabled,
+		remove_sales_person_question,
+	):
+		_run_safely(step)
 
 
 def restore_form_script_enabled_state():

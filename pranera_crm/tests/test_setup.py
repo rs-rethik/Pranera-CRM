@@ -122,3 +122,56 @@ class TestCustomerGroupFollowsCustomerType(CRMTestCase):
 
 	def test_no_group_until_customer_type_answered(self):
 		self.assertIsNone(self._group({}))
+
+
+def _failing(name):
+	def step():
+		raise Exception("boom")
+
+	step.__name__ = name
+	return step
+
+
+class TestHooksLogInsteadOfFailing(CRMTestCase):
+	def tearDown(self):
+		frappe.db.rollback()
+
+	def test_a_failing_step_is_logged_and_the_rest_still_run(self):
+		from unittest.mock import patch
+
+		with (
+			patch.object(setup, "ensure_default", new=_failing("ensure_default")),
+			patch.object(setup, "ensure_territories") as later_step,
+			patch("frappe.log_error") as log_error,
+		):
+			setup.after_migrate()
+
+		later_step.assert_called_once()
+		log_error.assert_called_once()
+		self.assertIn("ensure_default", log_error.call_args.kwargs["title"])
+
+	def test_after_install_also_survives_a_failing_step(self):
+		from unittest.mock import patch
+
+		with (
+			patch.object(
+				setup, "ensure_payment_terms_template", new=_failing("ensure_payment_terms_template")
+			),
+			patch.object(setup, "remove_sales_person_question") as last_step,
+			patch("frappe.log_error") as log_error,
+		):
+			setup.after_install()
+
+		last_step.assert_called_once()
+		log_error.assert_called_once()
+
+	def test_before_migrate_logs_instead_of_raising(self):
+		from unittest.mock import patch
+
+		with (
+			patch("frappe.db.exists", side_effect=Exception("db gone")),
+			patch("frappe.log_error") as log_error,
+		):
+			setup.before_migrate()
+
+		log_error.assert_called_once()
