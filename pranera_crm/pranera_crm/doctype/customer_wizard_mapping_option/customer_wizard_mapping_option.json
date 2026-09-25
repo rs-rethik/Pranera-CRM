@@ -13,7 +13,7 @@
  ],
  "fields": [
   {
-   "description": "Shown to the user answering the question, e.g. \"Yes\", \"Wholesale\", \"Tamil Nadu\".",
+   "description": "What the user sees, e.g. Yes or Wholesale.",
    "fieldname": "option_label",
    "fieldtype": "Data",
    "in_list_view": 1,
@@ -21,7 +21,7 @@
    "reqd": 1
   },
   {
-   "description": "Internal key used to match this answer against a follow-up question's \"Only when answer is\".",
+   "description": "Short code for this answer. Follow-up questions use it.",
    "fieldname": "option_value",
    "fieldtype": "Data",
    "in_list_view": 1,
@@ -29,21 +29,21 @@
    "reqd": 1
   },
   {
-   "description": "Value written to the target field when this answer is chosen. Leave empty for an answer that only triggers a follow-up question and should not change the field itself (e.g. an \"SEZ: No\" that should leave whatever the previous question set).",
+   "description": "Value saved when this answer is chosen. Leave empty to save nothing.",
    "fieldname": "mapped_value",
    "fieldtype": "Data",
    "in_list_view": 1,
    "label": "Assigned Value"
   },
   {
-   "description": "Value written to the question's Secondary Target field (if configured) when this answer is chosen. Same rules as Assigned Value: leave empty to write nothing there for this answer.",
+   "description": "Value saved on the secondary field when this answer is chosen. Leave empty to save nothing.",
    "fieldname": "secondary_mapped_value",
    "fieldtype": "Data",
    "label": "Secondary Assigned Value"
   },
   {
    "default": "0",
-   "description": "Pre-selects this answer. If it is the only enabled answer, the question is answered automatically and not shown.",
+   "description": "Pre-selects this answer. If it is the only one, it is chosen automatically and not shown.",
    "fieldname": "is_default",
    "fieldtype": "Check",
    "in_list_view": 1,

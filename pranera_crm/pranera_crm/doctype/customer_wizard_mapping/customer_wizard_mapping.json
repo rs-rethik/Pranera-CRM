@@ -38,7 +38,7 @@
  ],
  "fields": [
   {
-   "description": "Stable internal code for this question, e.g. \"gst_registered\". Referenced by follow-up questions' \"Only when answer is\" and never shown to the user.",
+   "description": "Short unique code, e.g. gst_registered. Not shown to users.",
    "fieldname": "question_key",
    "fieldtype": "Data",
    "in_list_view": 1,
@@ -47,7 +47,7 @@
    "unique": 1
   },
   {
-   "description": "The plain-language question shown to the user, e.g. \"Does the customer have a GSTIN?\"",
+   "description": "The question the sales user sees, e.g. \"Does the customer have a GST number?\"",
    "fieldname": "label",
    "fieldtype": "Data",
    "in_list_view": 1,
@@ -55,7 +55,7 @@
    "reqd": 1
   },
   {
-   "description": "Which step of the Deal Wizard this question appears in.",
+   "description": "Where the question appears: the Organization step or the Contact step.",
    "fieldname": "scope",
    "fieldtype": "Select",
    "in_list_view": 1,
@@ -66,7 +66,7 @@
   },
   {
    "default": "0",
-   "description": "The user must answer this question (or it resolves via a default answer / fallback value) before the wizard can submit.",
+   "description": "The user must answer this before continuing.",
    "fieldname": "is_mandatory",
    "fieldtype": "Check",
    "in_list_view": 1,
@@ -74,7 +74,7 @@
   },
   {
    "default": "1",
-   "description": "On: only asked/resolved when the ERPNext Customer bridge is enabled (the usual case — this question targets Customer/Address/Contact). Off: always asked/resolved regardless of the bridge, e.g. Territory or Industry, which apply to the CRM Lead/Organization either way.",
+   "description": "Tick to ask only when ERPNext customer setup is on. Untick to always ask, e.g. Territory or Industry.",
    "fieldname": "requires_erpnext_bridge",
    "fieldtype": "Check",
    "label": "Requires ERPNext Bridge"
@@ -84,14 +84,15 @@
    "fieldname": "enabled",
    "fieldtype": "Check",
    "in_list_view": 1,
-   "label": "Enabled"
+   "label": "Enabled",
+   "description": "Untick to stop asking this question."
   },
   {
    "fieldname": "column_break_basic",
    "fieldtype": "Column Break"
   },
   {
-   "description": "Which record this question's answer is written onto.",
+   "description": "Where the answer is saved.",
    "fieldname": "target_doctype",
    "fieldtype": "Select",
    "label": "Target Doctype",
@@ -99,7 +100,7 @@
    "reqd": 1
   },
   {
-   "description": "Fieldname on the target doctype, e.g. \"gst_category\". Checked against the doctype's actual fields on save. Use \"sales_team\" (on Customer) for a Sales Person question — it is special-cased to append a Sales Team row instead of setting a plain field.",
+   "description": "The field that gets the answer, e.g. gst_category. For a Sales Person question, use sales_team on Customer.",
    "fieldname": "target_fieldname",
    "fieldtype": "Data",
    "label": "Target Fieldname",
@@ -107,7 +108,7 @@
   },
   {
    "default": "Fixed",
-   "description": "Fixed: a curated list of answers you define below (Options). Dynamic: the answers are live records from another doctype (e.g. enabled Sales Persons) — still a friendly picked list, never a raw search box.",
+   "description": "Fixed: you list the answers below. Dynamic: the answers come from records in another doctype, e.g. Sales Persons.",
    "fieldname": "question_type",
    "fieldtype": "Select",
    "label": "Question Type",
@@ -121,7 +122,7 @@
    "label": "Secondary Target (optional)"
   },
   {
-   "description": "Also write this question's resolved answer onto a second field, e.g. Territory feeding both the CRM Organization and the ERPNext Customer. Each answer below then needs its own Secondary Assigned Value.",
+   "description": "Optional. Save the same answer on a second field too. Each answer then needs a Secondary Assigned Value.",
    "fieldname": "secondary_target_doctype",
    "fieldtype": "Select",
    "label": "Secondary Target Doctype",
@@ -129,7 +130,7 @@
   },
   {
    "depends_on": "eval:doc.secondary_target_doctype",
-   "description": "Fieldname on the Secondary Target Doctype.",
+   "description": "The field on that doctype.",
    "fieldname": "secondary_target_fieldname",
    "fieldtype": "Data",
    "label": "Secondary Target Fieldname"
@@ -157,7 +158,7 @@
   },
   {
    "depends_on": "eval:doc.question_type == \"Dynamic\"",
-   "description": "Doctype the live options are fetched from, e.g. \"Sales Person\".",
+   "description": "Where the answers come from, e.g. Sales Person.",
    "fieldname": "source_doctype",
    "fieldtype": "Link",
    "label": "Source Doctype",
@@ -166,7 +167,7 @@
   {
    "default": "name",
    "depends_on": "eval:doc.question_type == \"Dynamic\"",
-   "description": "Fieldname shown to the user as the answer's label, e.g. \"sales_person_name\". Defaults to the record's name.",
+   "description": "The field shown as the answer text, e.g. sales_person_name. Leave empty to show the record name.",
    "fieldname": "source_label_field",
    "fieldtype": "Data",
    "label": "Source Label Field"
@@ -177,7 +178,7 @@
   },
   {
    "depends_on": "eval:doc.question_type == \"Dynamic\"",
-   "description": "Optional Frappe filters as JSON, e.g. {\"enabled\": 1, \"is_group\": 0}. Wrap a previous answer in {{ }} to filter by it, e.g. {\"territory\": \"{{ answers.territory }}\"}.",
+   "description": "Optional filter as JSON, e.g. {\"enabled\": 1}. Use {{ answers.question_key }} to filter by an earlier answer.",
    "fieldname": "source_filters",
    "fieldtype": "Code",
    "label": "Filters (JSON)",
@@ -190,7 +191,7 @@
    "label": "Branching & Fallback"
   },
   {
-   "description": "Only ask this question after another one has been answered a particular way, e.g. a \"Regular or Composition?\" follow-up that only appears when \"Does the customer have a GSTIN?\" was answered \"Yes\".",
+   "description": "Show this question only after another question is answered a certain way.",
    "fieldname": "depends_on_question",
    "fieldtype": "Link",
    "label": "Only After Question",
@@ -198,7 +199,7 @@
   },
   {
    "depends_on": "eval:doc.depends_on_question",
-   "description": "The Answer Key (not label) of the answer above that must have been chosen.",
+   "description": "The Answer Key that must be chosen in that question.",
    "fieldname": "depends_on_option",
    "fieldtype": "Data",
    "label": "Only When Answer Is"
@@ -206,7 +207,7 @@
   {
    "default": "Is",
    "depends_on": "eval:doc.depends_on_question",
-   "description": "\"Is not\" shows this question for every answer of the parent except the one above, e.g. an Overseas GST category for every country except India. An unanswered parent hides the question either way.",
+   "description": "Is: show for that answer. Is not: show for every other answer.",
    "fieldname": "depends_on_operator",
    "fieldtype": "Select",
    "label": "Match",
@@ -217,14 +218,14 @@
    "fieldtype": "Column Break"
   },
   {
-   "description": "Used, and flagged on the Review step, when the user's path through the questions leaves this field unset.",
+   "description": "Value used when the user leaves this question unanswered.",
    "fieldname": "fallback_value",
    "fieldtype": "Data",
    "label": "Fallback Value"
   },
   {
    "default": "0",
-   "description": "Lower runs first. Later questions targeting the same field overwrite earlier ones (only when their chosen answer has an Assigned Value) — this is how two follow-up questions about the same field combine.",
+   "description": "Question order; lower comes first. If two questions fill the same field, the later answer wins.",
    "fieldname": "sequence",
    "fieldtype": "Int",
    "label": "Order"
@@ -236,7 +237,7 @@
    "label": "Review Step Override"
   },
   {
-   "description": "Roles allowed to override this question's assigned value on the Review step before submitting. One role per line. Leave empty to never allow overriding.",
+   "description": "Roles that can change the value on the Review step, one per line. Leave empty to allow nobody.",
    "fieldname": "override_roles",
    "fieldtype": "Small Text",
    "label": "Override Allowed For Roles"
