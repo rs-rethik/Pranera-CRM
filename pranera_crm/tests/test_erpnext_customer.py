@@ -1015,3 +1015,36 @@ class TestWizardContextIncludesAllQuestions(CRMTestCase):
 		)
 		self.assertEqual(child_payload["depends_on_question"], parent.name)
 		self.assertEqual(child_payload["depends_on_option"], "yes")
+
+
+class TestValidateResolvedFields(CRMTestCase):
+	def test_link_values_are_checked_with_one_query_per_linked_doctype(self):
+		from unittest.mock import patch
+
+		fields = {
+			"Customer": {"territory": "India", "customer_group": "Commercial", "default_currency": "INR"},
+			"Address": {"gst_category": "Unregistered"},
+		}
+		with (
+			patch("frappe.get_all", wraps=frappe.get_all) as spy,
+			patch("frappe.db.exists", wraps=frappe.db.exists) as exists,
+		):
+			ec._validate_resolved_fields(fields)
+
+		linked = [c.args[0] for c in spy.call_args_list]
+		for link_doctype in ("Currency", "Customer Group", "Territory"):
+			self.assertEqual(linked.count(link_doctype), 1)
+		exists.assert_not_called()
+
+	def test_missing_link_record_is_reported_with_its_source_field(self):
+		with self.assertRaises(frappe.ValidationError) as raised:
+			ec._validate_resolved_fields({"Customer": {"territory": "No Such Territory"}})
+		self.assertIn("No Such Territory", str(raised.exception))
+		self.assertIn("Customer.territory", str(raised.exception))
+
+	def test_invalid_select_value_still_rejected(self):
+		with self.assertRaises(frappe.ValidationError):
+			ec._validate_resolved_fields({"Address": {"gst_category": "Not A Category"}})
+
+	def test_blank_values_and_unknown_fields_are_skipped(self):
+		ec._validate_resolved_fields({"Customer": {"territory": "", "not_a_field": "x"}})

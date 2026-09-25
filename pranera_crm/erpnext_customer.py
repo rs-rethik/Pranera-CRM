@@ -263,7 +263,23 @@ def _validate_resolved_fields(fields_by_doctype: dict):
 	"""Every resolved/overridden value must be something the target field can
 	actually hold: Link values must exist as records, Select values must be one
 	of the field's options. A mis-configured mapping (or a tampered override
-	value) is blocked here instead of failing deep inside insert()."""
+	value) is blocked here instead of failing deep inside insert().
+
+	Link values are collected first and checked with one query per linked
+	doctype, not one ``exists`` per field."""
+	link_values: dict[str, set] = {}
+	for doctype, fields in fields_by_doctype.items():
+		meta = frappe.get_meta(doctype)
+		for fieldname, value in fields.items():
+			field = meta.get_field(fieldname)
+			if field and value and field.fieldtype == "Link":
+				link_values.setdefault(field.options, set()).add(value)
+
+	existing = {
+		link_doctype: set(frappe.get_all(link_doctype, filters={"name": ["in", list(values)]}, pluck="name"))
+		for link_doctype, values in link_values.items()
+	}
+
 	for doctype, fields in fields_by_doctype.items():
 		meta = frappe.get_meta(doctype)
 		for fieldname, value in fields.items():
@@ -271,7 +287,7 @@ def _validate_resolved_fields(fields_by_doctype: dict):
 			if not field or not value:
 				continue
 			if field.fieldtype == "Link":
-				if not frappe.db.exists(field.options, value):
+				if value not in existing[field.options]:
 					frappe.throw(
 						_("{0} {1} does not exist (from {2}.{3})").format(
 							_(field.options), value, doctype, fieldname
