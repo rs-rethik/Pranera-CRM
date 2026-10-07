@@ -13,7 +13,10 @@ declare module 'vue' {
   export interface GlobalComponents {
     CandidateList: typeof import('./src/components/CandidateList.vue')['default']
     FieldControl: typeof import('./src/components/FieldControl.vue')['default']
+    MultiLinkSelect: typeof import('./src/components/MultiLinkSelect.vue')['default']
     QuestionField: typeof import('./src/components/QuestionField.vue')['default']
+    ReportExportModal: typeof import('./src/components/ReportExportModal.vue')['default']
+    ReportPrintModal: typeof import('./src/components/ReportPrintModal.vue')['default']
     ReviewCard: typeof import('./src/components/ReviewCard.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
