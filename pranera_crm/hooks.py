@@ -17,6 +17,7 @@ page_renderer = ["pranera_crm.sw.ServiceWorkerRenderer"]
 fixtures = [
 	{"dt": "CRM Form Script", "filters": [["name", "=", "Pranera Convert Wizard"]]},
 	{"dt": "Custom Field", "filters": [["name", "=", "FCRM Settings-enable_convert_to_deal_wizard"]]},
+	{"dt": "Report", "filters": [["name", "=", "Deals by Status"]]},
 ]
 
 before_migrate = "pranera_crm.setup.before_migrate"
