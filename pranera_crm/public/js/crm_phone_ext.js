@@ -114,7 +114,7 @@
 		control.before(trigger);
 		if (!sideRow) field.classList.add("pranera-phone-field");
 
-		field.pranera = { trigger, chosen: "", rendered: null, popup: null };
+		field.pranera = { trigger, chosen: "", rendered: null, popup: null, hadNumber: false };
 		sync(field);
 	}
 
@@ -133,12 +133,24 @@
 		field.pranera.rendered = chosen;
 	}
 
+	// The box shows only the national number: the country is the button's job. The full
+	// "+91 98765 43210" stays in CRM's data. CRM puts the full value back in the box whenever
+	// it re-renders, so this runs again shortly after (see start).
 	function sync(field) {
 		const input = field.querySelector(MARKUP.input);
 		const state = field.pranera;
 		if (!input || !state) return;
-		const fromValue = countryOf(input.value);
-		if (fromValue) state.chosen = fromValue.code;
+		const country = countryOf(input.value);
+		if (country) {
+			state.chosen = country.code;
+			state.hadNumber = true;
+			// not while it is being typed in
+			if (document.activeElement !== input) input.value = nationalPart(input.value, country);
+		} else if (input.value.trim() === "" && state.hadNumber) {
+			// the record changed to one without a number: its country is not the last one's
+			state.chosen = "";
+			state.hadNumber = false;
+		}
 		if (state.rendered !== state.chosen) renderTrigger(field);
 		state.trigger.disabled = input.disabled;
 	}
@@ -414,8 +426,8 @@
 				scan();
 			});
 		}).observe(document.body, { childList: true, subtree: true });
-		// CRM sets a box's value without an event when a record loads: catch up now and then
-		setInterval(scan, 700);
+		// CRM sets a box's value without an event when a record loads or re-renders: catch up
+		setInterval(scan, 120);
 		scan();
 	}
 
