@@ -51,6 +51,46 @@
 	// is rebuilt once the width settles
 	const widthWatch = new ResizeObserver(() => ensureSection());
 
+	// The open panel is kept in CRM's URL (?pranera_panel=reports | report:<name>) so a
+	// refresh, or a copied link, comes back to it. CRM's router ignores the extra param.
+	const PANEL_PARAM = "pranera_panel";
+	const rawReplaceState = history.replaceState.bind(history);
+
+	function panelFromUrl() {
+		const value = new URLSearchParams(location.search).get(PANEL_PARAM);
+		if (value === HUB_KEY) return { key: HUB_KEY, url: REPORTS_URL };
+		if (value?.startsWith("report:") && value.length > 7) {
+			return { key: value, url: reportUrl(value.slice(7)) };
+		}
+		return null;
+	}
+
+	function stripPanel(url) {
+		const parsed = new URL(url, location.origin);
+		parsed.searchParams.delete(PANEL_PARAM);
+		return parsed.pathname + parsed.search;
+	}
+
+	function urlWithPanel(key) {
+		const params = new URLSearchParams(location.search);
+		if (key === null) params.delete(PANEL_PARAM);
+		else params.set(PANEL_PARAM, key);
+		const search = params.toString();
+		return location.pathname + (search ? `?${search}` : "") + location.hash;
+	}
+
+	// not history.replaceState: that one is patched below and would count as a navigation
+	function writePanelToUrl(key) {
+		const url = urlWithPanel(key);
+		if (url !== location.pathname + location.search + location.hash) {
+			rawReplaceState(history.state, "", url);
+		}
+		lastUrl = currentUrl();
+	}
+
+	// a panel to restore from the URL, once CRM's sidebar has rendered
+	let pendingPanel = null;
+
 	// ------------------------------------------------------------------------ //
 	// Pinned reports
 	// ------------------------------------------------------------------------ //
@@ -98,6 +138,16 @@
 			existing?.remove();
 			box.append(buildSection(refItem, sidebar, signature));
 		}
+		restorePanel();
+	}
+
+	function restorePanel() {
+		if (!pendingPanel) return;
+		const sidebar = document.querySelector(MARKUP.sidebar);
+		if (!sidebar && !isMobile()) return;
+		const { key, url } = pendingPanel;
+		pendingPanel = null;
+		showPanel(key, url, isMobile() ? null : sidebar);
 	}
 
 	function isCollapsed(sidebar) {
@@ -243,7 +293,7 @@
 		panel.hidden = false;
 		positionPanel();
 		syncItemsState();
-		lastUrl = currentUrl();
+		writePanelToUrl(key);
 	}
 
 	function closePanel() {
@@ -253,6 +303,8 @@
 		sidebarResize.disconnect();
 		panelSidebar = null;
 		syncItemsState();
+		// a navigation already left the param behind; closing by Esc or the X didn't
+		if (new URLSearchParams(location.search).has(PANEL_PARAM)) writePanelToUrl(null);
 	}
 
 	function buildPanel() {
@@ -313,6 +365,11 @@
 		// real change of page closes the report
 		const url = currentUrl();
 		if (url === lastUrl) return;
+		// vue-router rewrites the URL without our param: put it back
+		if (activeKey !== null && stripPanel(url) === stripPanel(lastUrl)) {
+			writePanelToUrl(activeKey);
+			return;
+		}
 		lastUrl = url;
 		closePanel();
 	}
@@ -327,6 +384,16 @@
 	}
 	window.addEventListener("popstate", onUrlChange);
 
+	// The report page navigated (e.g. from the list to a report): keep the highlight and the URL in step
+	function followPanelRoute(path) {
+		if (activeKey === null || typeof path !== "string") return;
+		const match = /^\/reports(?:\/([^/]+))?\/?$/.exec(path);
+		if (!match) return;
+		activeKey = match[1] ? `report:${decodeURIComponent(match[1])}` : HUB_KEY;
+		syncItemsState();
+		writePanelToUrl(activeKey);
+	}
+
 	// Messages from the report page (same origin only)
 	window.addEventListener("message", (event) => {
 		if (event.origin !== location.origin) return;
@@ -334,6 +401,7 @@
 		const type = typeof data === "string" ? data : data?.type;
 		if (type === "pranera:close-panel") closePanel();
 		else if (type === "pranera:pins-changed") loadPins();
+		else if (type === "pranera:panel-route") followPanelRoute(data.path);
 		else if (
 			type === "pranera:open-crm" &&
 			typeof data.path === "string" &&
@@ -388,5 +456,8 @@
 		attributes: true,
 		attributeFilter: ["class"],
 	});
+	pendingPanel = panelFromUrl();
 	loadPins();
+	// on a phone CRM renders no sidebar to wait for
+	if (pendingPanel && isMobile()) setTimeout(restorePanel, 500);
 })();
