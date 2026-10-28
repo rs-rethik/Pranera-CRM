@@ -12,8 +12,10 @@ doc_events = {
 	"CRM Deal": {"validate": "pranera_crm.lost_reasons.validate"},
 }
 
-after_install = "pranera_crm.lost_reasons.ensure_fields"
-after_migrate = "pranera_crm.lost_reasons.ensure_fields"
+after_install = ["pranera_crm.lost_reasons.ensure_fields", "pranera_crm.owner_follow_up.ensure_fields"]
+after_migrate = ["pranera_crm.lost_reasons.ensure_fields", "pranera_crm.owner_follow_up.ensure_fields"]
+
+scheduler_events = {"cron": {"0 10 * * *": ["pranera_crm.owner_follow_up.run"]}}
 
 # Apps
 # ------------------
