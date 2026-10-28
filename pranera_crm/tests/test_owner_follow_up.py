@@ -168,3 +168,13 @@ class TestOwnerFollowUp(CRMTestCase):
 		self.assertIn(lead, params[2])
 		self.assertEqual(params[3], "8")
 		self.assertTrue(params[4].endswith(f"/crm/leads/{lead}"))
+
+	def test_unset_days_and_limit_fall_back_to_the_defaults(self):
+		frappe.db.set_single_value(ofu.SETTINGS, "owner_follow_up_days", 0)
+		frappe.db.set_single_value(ofu.SETTINGS, "owner_follow_up_daily_limit", 0)
+		frappe.clear_document_cache(ofu.SETTINGS, ofu.SETTINGS)
+		cfg = ofu.config()
+		self.assertEqual((cfg.days, cfg.limit), (ofu.DEFAULT_DAYS, ofu.DEFAULT_DAILY_LIMIT))
+		for _ in range(ofu.DEFAULT_DAILY_LIMIT + 2):
+			self._lead()
+		self.assertEqual(len(ofu.run()), ofu.DEFAULT_DAILY_LIMIT)

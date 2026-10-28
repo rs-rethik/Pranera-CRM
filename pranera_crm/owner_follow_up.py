@@ -13,6 +13,8 @@ TEMPLATE = "WhatsApp Templates"
 SENT_FIELD = "owner_follow_up_sent_on"
 CLOSED_TYPES = ("Won", "Lost", "On Hold")
 TEMPLATE_VALUES = 5
+DEFAULT_DAYS = 7
+DEFAULT_DAILY_LIMIT = 10
 
 RECORDS = {
 	LEAD: {
@@ -73,15 +75,15 @@ def settings_fields() -> list[dict]:
 			"fieldname": "owner_follow_up_days",
 			"label": "No Activity For (Days)",
 			"fieldtype": "Int",
-			"default": "7",
+			"default": str(DEFAULT_DAYS),
 			"insert_after": "enable_owner_follow_up",
 		},
 		{
 			"fieldname": "owner_follow_up_daily_limit",
 			"label": "Most Follow-ups per Owner per Day",
 			"fieldtype": "Int",
-			"default": "10",
-			"description": "The rest go on the next days, the longest idle first.",
+			"default": str(DEFAULT_DAILY_LIMIT),
+			"description": "The rest go on the next days, the longest idle first. Empty or 0: 10.",
 			"insert_after": "owner_follow_up_days",
 		},
 	]
@@ -126,8 +128,8 @@ def config() -> frappe._dict | None:
 		)
 		return None
 	return frappe._dict(
-		days=cint(settings.owner_follow_up_days) or 7,
-		limit=cint(settings.owner_follow_up_daily_limit),
+		days=cint(settings.owner_follow_up_days) or DEFAULT_DAYS,
+		limit=cint(settings.owner_follow_up_daily_limit) or DEFAULT_DAILY_LIMIT,
 		template=settings.owner_follow_up_template,
 		account=account,
 	)
@@ -145,7 +147,7 @@ def run() -> list[tuple[str, str]]:
 
 	sent, per_owner, phones = [], {}, {}
 	for record in due:
-		if cfg.limit and per_owner.get(record.owner, 0) >= cfg.limit:
+		if per_owner.get(record.owner, 0) >= cfg.limit:
 			continue
 		if record.owner not in phones:
 			phones[record.owner] = owner_contact(record.owner)
