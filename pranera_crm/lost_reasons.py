@@ -1,19 +1,3 @@
-"""Lead reasons on leads, deal reasons on deals.
-
-CRM Lead and CRM Deal share one CRM Lost Reason master. Each reason is tagged there (nothing is
-built in): "Applies To" (Lead, Deal or Both) and, for a lead reason, the lead status it belongs to.
-
-1. The Lost Reason picker in the CRM lists only the reasons for the record it is on. The picker
-   says nothing about that record, so the page it was opened from tells (/crm/leads/... or
-   /crm/deals/...); anywhere else every reason is listed.
-2. Saving a closed lead or deal with a reason of the other kind, or a lead reason of another lead
-   status, is refused. This holds however the record is saved (form, import, API).
-3. A lead moving to a status that has exactly one reason gets it filled in, as the CRM only asks
-   for a reason on Lost statuses (an On Hold status like No Response is never asked).
-
-A reason with no Applies To counts as Both, so nothing is hidden before it is tagged.
-"""
-
 from urllib.parse import urlparse
 
 import frappe
@@ -52,7 +36,6 @@ CUSTOM_FIELDS = {
 
 
 def _ready() -> bool:
-	"""The fields exist (they are added on install and migrate; until then nothing changes)."""
 	return frappe.get_meta(REASON).has_field("applies_to")
 
 
@@ -60,11 +43,7 @@ def ensure_fields():
 	create_custom_fields(CUSTOM_FIELDS, update=True)
 
 
-# --- The picker ----------------------------------------------------------------------------------
-
-
 def _record_doctype(reference_doctype: str | None = None) -> str | None:
-	"""CRM Lead or CRM Deal when the picker is on one, else None."""
 	if reference_doctype in APPLIES_TO:
 		return reference_doctype
 	request = getattr(frappe.local, "request", None)
@@ -79,7 +58,6 @@ def _record_doctype(reference_doctype: str | None = None) -> str | None:
 @frappe.whitelist()
 @frappe.validate_and_sanitize_search_inputs
 def search(doctype, txt, searchfield, start, page_len, filters, **kwargs):
-	"""The Lost Reason picker (standard_queries): only the reasons for the record it is on."""
 	conditions = []
 	record = _record_doctype(kwargs.get("reference_doctype"))
 	if record and _ready():
@@ -97,16 +75,12 @@ def search(doctype, txt, searchfield, start, page_len, filters, **kwargs):
 	)
 
 
-# --- On save --------------------------------------------------------------------------------------
-
-
 def _status_type(doc) -> str | None:
 	status_doctype = "CRM Lead Status" if doc.doctype == LEAD else "CRM Deal Status"
 	return frappe.get_cached_value(status_doctype, doc.status, "type") if doc.status else None
 
 
 def validate(doc, method=None):
-	"""doc_events validate of CRM Lead and CRM Deal."""
 	if not _ready():
 		return
 	if doc.doctype == LEAD and doc.has_value_changed("status") and not doc.lost_reason:
@@ -114,7 +88,7 @@ def validate(doc, method=None):
 	if not doc.lost_reason or _status_type(doc) not in CLOSED_TYPES:
 		return
 	if not (doc.has_value_changed("lost_reason") or doc.has_value_changed("status")):
-		return  # a record closed before these rules keeps its reason
+		return
 	reason = frappe.db.get_value(REASON, doc.lost_reason, ["applies_to", "lead_status"], as_dict=True)
 	if not reason:
 		return
@@ -136,7 +110,6 @@ def validate(doc, method=None):
 
 
 def only_reason(lead_status: str | None) -> str | None:
-	"""The reason of a lead status that has exactly one."""
 	if not lead_status:
 		return None
 	reasons = frappe.get_all(

@@ -6,7 +6,6 @@ from crm.tests import CRMTestCase
 from pranera_crm import lost_reasons
 from pranera_crm.tests.test_api import make_lead
 
-# Test data only: the app has no reasons or statuses of its own.
 LEAD_STATUSES = {"ZZT Unsuitable": "Lost", "ZZT Junk": "Lost", "ZZT Silent": "On Hold"}
 REASONS = {
 	"ZZT Deal Price": ("Deal", None),
@@ -100,7 +99,6 @@ class TestLostReasons(CRMTestCase):
 
 	def test_a_status_with_one_reason_gets_it_filled_in(self):
 		self.assertEqual(self._close(make_lead(), "ZZT Silent").lost_reason, "ZZT No Reply")
-		# Two reasons: the person picks.
 		self.assertIsNone(lost_reasons.only_reason("ZZT Unsuitable"))
 
 	def test_a_reason_given_before_these_rules_is_not_checked_again(self):
