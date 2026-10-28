@@ -20,6 +20,13 @@ fixtures = [
 	{"dt": "Report", "filters": [["name", "=", "Deals by Status"]]},
 ]
 
+standard_queries = {"CRM Lost Reason": "pranera_crm.lost_reasons.search"}
+
+doc_events = {
+	"CRM Lead": {"validate": "pranera_crm.lost_reasons.validate"},
+	"CRM Deal": {"validate": "pranera_crm.lost_reasons.validate"},
+}
+
 before_migrate = "pranera_crm.setup.before_migrate"
 after_install = "pranera_crm.setup.after_install"
 after_migrate = "pranera_crm.setup.after_migrate"
