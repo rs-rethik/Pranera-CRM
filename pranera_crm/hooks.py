@@ -5,6 +5,16 @@ app_description = "A step-by-step deal conversion wizard for Frappe CRM"
 app_email = "rethik@aerele.in"
 app_license = "mit"
 
+standard_queries = {"CRM Lost Reason": "pranera_crm.lost_reasons.search"}
+
+doc_events = {
+	"CRM Lead": {"validate": "pranera_crm.lost_reasons.validate"},
+	"CRM Deal": {"validate": "pranera_crm.lost_reasons.validate"},
+}
+
+after_install = "pranera_crm.lost_reasons.ensure_fields"
+after_migrate = "pranera_crm.lost_reasons.ensure_fields"
+
 # Apps
 # ------------------
 
@@ -252,4 +262,3 @@ app_license = "mit"
 # ------------
 # List of apps whose translatable strings should be excluded from this app's translations.
 # ignore_translatable_strings_from = []
-
