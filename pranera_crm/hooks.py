@@ -27,6 +27,8 @@ doc_events = {
 	"CRM Deal": {"validate": "pranera_crm.lost_reasons.validate"},
 }
 
+scheduler_events = {"daily": ["pranera_crm.follow_ups.create"]}
+
 before_migrate = "pranera_crm.setup.before_migrate"
 after_install = "pranera_crm.setup.after_install"
 after_migrate = "pranera_crm.setup.after_migrate"
