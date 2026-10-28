@@ -42,7 +42,7 @@ def after_install():
 			ensure_customer_wizard_questions,
 			ensure_erpnext_customer_sync_disabled,
 			remove_sales_person_question,
-			lost_reasons.seed,
+			lost_reasons.ensure_fields,
 		):
 			_run_safely(step)
 	except Exception:

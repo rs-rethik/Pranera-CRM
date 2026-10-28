@@ -6,4 +6,3 @@
 # Patches added in this section will be executed after doctypes are migrated
 pranera_crm.patches.restrict_customer_group_by_customer_type
 pranera_crm.patches.convert_override_roles_to_multiselect
-pranera_crm.patches.tag_lost_reasons
