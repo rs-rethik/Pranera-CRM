@@ -2,7 +2,7 @@ import json
 
 import frappe
 
-from pranera_crm import lost_reasons
+from pranera_crm import lost_reasons, owner_follow_up
 from pranera_crm.settings import ensure_default
 
 ERPNEXT_SYNC_DEFAULT_APPLIED = "pranera_crm_erpnext_sync_default_applied"
@@ -43,6 +43,7 @@ def after_install():
 			ensure_erpnext_customer_sync_disabled,
 			remove_sales_person_question,
 			lost_reasons.ensure_fields,
+			owner_follow_up.ensure_fields,
 		):
 			_run_safely(step)
 	except Exception:
@@ -60,6 +61,7 @@ def after_migrate():
 			ensure_erpnext_customer_sync_disabled,
 			remove_sales_person_question,
 			lost_reasons.ensure_fields,
+			owner_follow_up.ensure_fields,
 		):
 			_run_safely(step)
 	except Exception:
