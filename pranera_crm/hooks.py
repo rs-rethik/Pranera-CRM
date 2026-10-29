@@ -10,6 +10,7 @@ required_apps = ["crm", "erpnext"]
 website_route_rules = [
 	{"from_route": "/deal_wizard/sw.js", "to_route": "deal_wizard_sw"},
 	{"from_route": "/deal_wizard/<path:app_path>", "to_route": "deal_wizard"},
+	{"from_route": "/crm-open/<name>", "to_route": "crm_open"},
 ]
 
 page_renderer = ["pranera_crm.sw.ServiceWorkerRenderer"]

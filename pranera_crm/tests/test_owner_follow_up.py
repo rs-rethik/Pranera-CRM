@@ -1,8 +1,10 @@
+import json
 from unittest.mock import patch
 
 import frappe
 from crm.tests import CRMTestCase
 from frappe.utils import add_days, now_datetime
+from frappe.utils.password import set_encrypted_password
 
 from pranera_crm import owner_follow_up as ofu
 from pranera_crm.tests.test_api import make_lead
@@ -10,6 +12,7 @@ from pranera_crm.tests.test_api import make_lead
 REAL_SEND = ofu.send
 OWNER = "zzf-owner@example.com"
 TEMPLATE = "zzf_owner_follow_up-en"
+BUTTON_TEMPLATE = "zzf_owner_follow_up_button-en"
 ACCOUNT = "ZZF Meta"
 
 
@@ -49,6 +52,7 @@ class TestOwnerFollowUp(CRMTestCase):
 					"phone_id": "zzf",
 				}
 			).db_insert()
+		set_encrypted_password("WhatsApp Account", ACCOUNT, "test-token", "token")
 		if not frappe.db.exists("WhatsApp Templates", TEMPLATE):
 			frappe.get_doc(
 				{
@@ -150,24 +154,91 @@ class TestOwnerFollowUp(CRMTestCase):
 		self.assertEqual(ofu.whatsapp_number("+91 98765-43210"), "919876543210")
 		self.assertEqual(ofu.whatsapp_number("12345"), None)
 
-	def test_the_message_goes_from_the_settings_account_with_the_template_values(self):
+	def _real_send(self, template=TEMPLATE):
 		lead = self._lead()
+		frappe.db.set_single_value(ofu.SETTINGS, "owner_follow_up_template", template)
+		frappe.clear_document_cache(ofu.SETTINGS, ofu.SETTINGS)
 		record = ofu.idle_records("CRM Lead", add_days(now_datetime(), -7))[0]
 		requests = []
-		message_class = frappe.get_doc({"doctype": "WhatsApp Message"}).__class__
-		with patch.object(
-			message_class, "notify", lambda doc, data: requests.append((doc.whatsapp_account, data))
-		):
+
+		def post(url, headers, data):
+			requests.append(json.loads(data))
+			return {"messages": [{"id": "wamid.TEST"}]}
+
+		with patch.object(ofu, "make_post_request", post):
 			REAL_SEND(ofu.config(), record, ofu.owner_contact(OWNER))
-		account, data = requests[0]
-		self.assertEqual(account, ACCOUNT)
+		return lead, requests[0]
+
+	def test_the_message_goes_from_the_settings_account_with_the_link_in_the_text(self):
+		lead, data = self._real_send()
 		self.assertEqual(data["to"], "919876543210")
 		self.assertEqual(data["template"]["name"], "zzf_owner_follow_up")
+		self.assertEqual(len(data["template"]["components"]), 1)
 		params = [p["text"] for p in data["template"]["components"][0]["parameters"]]
 		self.assertEqual(params[:2], ["Ravi", "Lead"])
 		self.assertIn(lead, params[2])
 		self.assertEqual(params[3], "8")
 		self.assertTrue(params[4].endswith(f"/crm/leads/{lead}"))
+		saved = frappe.get_all(
+			"WhatsApp Message",
+			filters={"message_id": "wamid.TEST"},
+			fields=["to", "whatsapp_account", "reference_doctype", "message"],
+		)
+		self.assertEqual(len(saved), 1)
+		self.assertEqual((saved[0].whatsapp_account, saved[0].reference_doctype), (ACCOUNT, None))
+		self.assertIn(f"idle 8 days: {params[4]}", saved[0].message)
+
+	def test_a_button_template_opens_the_record_from_the_button(self):
+		if not frappe.db.exists("WhatsApp Templates", BUTTON_TEMPLATE):
+			frappe.get_doc(
+				{
+					"doctype": "WhatsApp Templates",
+					"name": BUTTON_TEMPLATE,
+					"template_name": "zzf_owner_follow_up_button",
+					"actual_name": "zzf_owner_follow_up_button",
+					"language_code": "en",
+					"template": "Hi {{1}}, {{2}} {{3}} idle {{4}} days. Thanks",
+					"sample_values": "Ravi,Lead,Sri Ganesh Mills (CRM-LEAD-1),7",
+					"category": "UTILITY",
+				}
+			).db_insert()
+			frappe.get_doc(
+				{
+					"doctype": "WhatsApp Button",
+					"parent": BUTTON_TEMPLATE,
+					"parenttype": "WhatsApp Templates",
+					"parentfield": "buttons",
+					"idx": 1,
+					"button_type": "Visit Website",
+					"button_label": "Open in CRM",
+					"url_type": "Dynamic",
+					"website_url": "https://crm.example.com/crm-open/{{1}}",
+				}
+			).db_insert()
+		lead, data = self._real_send(BUTTON_TEMPLATE)
+		body, button = data["template"]["components"]
+		self.assertEqual(len(body["parameters"]), 4)
+		self.assertEqual(
+			button,
+			{
+				"type": "button",
+				"sub_type": "url",
+				"index": "0",
+				"parameters": [{"type": "text", "text": lead}],
+			},
+		)
+
+	def test_crm_open_goes_to_the_lead_or_deal(self):
+		from pranera_crm.www import crm_open
+
+		lead = self._lead()
+		for user, expected in (("Administrator", f"/crm/leads/{lead}"), ("Guest", "/login?redirect-to=")):
+			frappe.set_user(user)
+			frappe.form_dict.name = lead
+			with self.assertRaises(frappe.Redirect):
+				crm_open.get_context(frappe._dict())
+			self.assertTrue(frappe.local.flags.redirect_location.startswith(expected))
+		frappe.set_user("Administrator")
 
 	def test_unset_days_and_limit_fall_back_to_the_defaults(self):
 		frappe.db.set_single_value(ofu.SETTINGS, "owner_follow_up_days", 0)
