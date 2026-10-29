@@ -5,6 +5,8 @@ app_description = "A step-by-step deal conversion wizard for Frappe CRM"
 app_email = "rethik@aerele.in"
 app_license = "mit"
 
+website_route_rules = [{"from_route": "/crm-open/<name>", "to_route": "crm_open"}]
+
 standard_queries = {"CRM Lost Reason": "pranera_crm.lost_reasons.search"}
 
 doc_events = {
