@@ -1,0 +1,145 @@
+{
+ "actions": [],
+ "creation": "2026-11-10 12:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-11-10 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Pranera CRM",
+ "owner": "Administrator",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "name": "Conversion Report Settings",
+ "issingle": 1,
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "read": 1,
+   "write": 1,
+   "role": "System Manager"
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "read": 1,
+   "write": 1,
+   "role": "Sales Manager"
+  }
+ ],
+ "field_order": [
+  "enabled",
+  "frequency",
+  "weekday",
+  "month_day",
+  "send_time",
+  "column_break_whatsapp",
+  "whatsapp_account",
+  "template",
+  "section_recipients",
+  "recipients",
+  "section_last",
+  "last_sent_on",
+  "last_period",
+  "column_break_last",
+  "last_result"
+ ],
+ "fields": [
+  {
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "label": "Send Automatically",
+   "default": "0"
+  },
+  {
+   "fieldname": "frequency",
+   "fieldtype": "Select",
+   "label": "Frequency",
+   "options": "Daily\nWeekly\nMonthly",
+   "default": "Weekly",
+   "description": "Daily covers yesterday, Weekly the last Monday to Sunday, Monthly the last calendar month."
+  },
+  {
+   "fieldname": "weekday",
+   "fieldtype": "Select",
+   "label": "Day of the Week",
+   "options": "Monday\nTuesday\nWednesday\nThursday\nFriday\nSaturday\nSunday",
+   "default": "Monday",
+   "depends_on": "eval:doc.frequency=='Weekly'"
+  },
+  {
+   "fieldname": "month_day",
+   "fieldtype": "Int",
+   "label": "Day of the Month",
+   "default": "1",
+   "depends_on": "eval:doc.frequency=='Monthly'",
+   "description": "1 to 28."
+  },
+  {
+   "fieldname": "send_time",
+   "fieldtype": "Time",
+   "label": "Send At",
+   "default": "09:00:00"
+  },
+  {
+   "fieldname": "column_break_whatsapp",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "whatsapp_account",
+   "fieldtype": "Link",
+   "label": "WhatsApp Account",
+   "options": "WhatsApp Account",
+   "description": "The WhatsApp account the report is sent from. Leave empty for the default outgoing account in WhatsApp Settings."
+  },
+  {
+   "fieldname": "template",
+   "fieldtype": "Link",
+   "label": "WhatsApp Template",
+   "options": "WhatsApp Templates",
+   "description": "An approved template with a Document header; the PDF goes in the header. Its body values are filled in this order: period, new leads, converted, conversion rate, deals won, won value."
+  },
+  {
+   "fieldname": "section_recipients",
+   "fieldtype": "Section Break",
+   "label": "Recipients"
+  },
+  {
+   "fieldname": "recipients",
+   "fieldtype": "Table",
+   "label": "Recipients",
+   "options": "Conversion Report Recipient"
+  },
+  {
+   "fieldname": "section_last",
+   "fieldtype": "Section Break",
+   "label": "Last Run",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "last_sent_on",
+   "fieldtype": "Datetime",
+   "label": "Last Sent On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_period",
+   "fieldtype": "Data",
+   "label": "Last Period",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_last",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "last_result",
+   "fieldtype": "Small Text",
+   "label": "Last Result",
+   "read_only": 1
+  }
+ ]
+}
