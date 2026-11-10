@@ -14,10 +14,24 @@ doc_events = {
 	"CRM Deal": {"validate": "pranera_crm.lost_reasons.validate"},
 }
 
-after_install = ["pranera_crm.lost_reasons.ensure_fields", "pranera_crm.owner_follow_up.ensure_fields"]
-after_migrate = ["pranera_crm.lost_reasons.ensure_fields", "pranera_crm.owner_follow_up.ensure_fields"]
+after_install = [
+	"pranera_crm.lost_reasons.ensure_fields",
+	"pranera_crm.owner_follow_up.ensure_fields",
+	"pranera_crm.conversion_report.ensure_defaults",
+]
+after_migrate = [
+	"pranera_crm.lost_reasons.ensure_fields",
+	"pranera_crm.owner_follow_up.ensure_fields",
+	"pranera_crm.conversion_report.ensure_defaults",
+]
 
-scheduler_events = {"cron": {"0 10 * * *": ["pranera_crm.owner_follow_up.run"]}}
+scheduler_events = {
+	"cron": {
+		"0 10 * * *": ["pranera_crm.owner_follow_up.run"],
+		# the conversion report PDF on WhatsApp, when Conversion Report Settings says it is due
+		"*/15 * * * *": ["pranera_crm.conversion_report.run_scheduled"],
+	}
+}
 
 # Apps
 # ------------------
