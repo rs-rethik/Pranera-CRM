@@ -296,6 +296,15 @@ def company_name() -> str:
 	)
 
 
+def _bar(rate) -> str:
+	"""A conversion or share bar with its percentage (a table: wkhtmltopdf has no flexbox)."""
+	width = max(0.0, min(rate, 100.0))
+	return (
+		f'<table class="rate"><tr><td><div class="bar"><div style="width:{width}%"></div></div></td>'
+		f"<td class='pct'>{rate:g}%</td></tr></table>"
+	)
+
+
 def render_html(data: dict) -> str:
 	cur = data["currency"]
 	s = data["summary"]
@@ -303,18 +312,12 @@ def render_html(data: dict) -> str:
 	def money(v):
 		return escape_html(fmt_money(v, precision=0, currency=cur))
 
-	def bar(rate):
-		width = max(0.0, min(rate, 100.0))
-		return (
-			f'<div class="rate"><span class="bar"><i style="width:{width}%"></i></span><b>{rate:g}%</b></div>'
-		)
-
 	def line(r, cls=""):
 		cls = cls or ("muted" if r["name"] in (NO_PERSON, NO_TERRITORY) else "")
 		return (
 			f"<tr class='{cls}'><td>{escape_html(r['name'])}</td>"
 			f"<td class='n'>{r['leads']}</td><td class='n'>{r['converted']}</td>"
-			f"<td>{bar(r['rate'])}</td><td class='n'>{r['won']}</td>"
+			f"<td>{_bar(r['rate'])}</td><td class='n'>{r['won']}</td>"
 			f"<td class='n'>{money(r['value'])}</td></tr>"
 		)
 
@@ -369,23 +372,19 @@ def render_html(data: dict) -> str:
 	generated = escape_html(format_datetime(now_datetime(), "d MMM yyyy, h:mm a"))
 	return f"""<!doctype html>
 <html><head><meta charset="utf-8"><style>
-@page {{
-	size: A4; margin: 16mm 14mm 18mm;
-	@bottom-left {{ content: "{company} · CRM conversion report · {escape_html(data["label"])}"; font: 8pt sans-serif; color: #8a8f98; }}
-	@bottom-right {{ content: "Page " counter(page) " of " counter(pages); font: 8pt sans-serif; color: #8a8f98; }}
-}}
 * {{ box-sizing: border-box; }}
 body {{ font-family: "Inter", "Noto Sans", "DejaVu Sans", sans-serif; color: #1f2329; font-size: 9.5pt; margin: 0; }}
-.top {{ display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid #0f5e4f; padding-bottom: 8pt; }}
+.top {{ border-bottom: 2px solid #0f5e4f; }}
+.top td {{ border: none; padding: 0 0 8pt; vertical-align: bottom; }}
 .brand {{ font-size: 9pt; letter-spacing: .12em; text-transform: uppercase; color: #0f5e4f; font-weight: 700; }}
 h1 {{ font-size: 19pt; margin: 2pt 0 0; }}
-.period {{ text-align: right; font-size: 9pt; color: #5b616e; }}
+.top td.period {{ text-align: right; font-size: 9pt; color: #5b616e; }}
 .period b {{ display: block; font-size: 12pt; color: #1f2329; }}
-.tiles {{ display: flex; gap: 7pt; margin: 14pt 0 6pt; }}
-.tile {{ flex: 1; border: 1px solid #e3e6ea; border-radius: 7pt; padding: 8pt 9pt; }}
-.tile.wide {{ flex: 1.6; }}
+.tiles {{ border-collapse: separate; border-spacing: 5pt 0; margin: 14pt 0 6pt; }}
+.tiles td.tile {{ width: 15%; border: 1px solid #e3e6ea; border-radius: 7pt; padding: 8pt 9pt; vertical-align: top; }}
+.tiles td.tile.wide {{ width: 25%; }}
 .tile .v.money {{ font-size: 13pt; white-space: nowrap; padding-top: 2pt; }}
-.tile.key {{ background: #0f5e4f; border-color: #0f5e4f; color: #fff; }}
+.tiles td.tile.key {{ background: #0f5e4f; border-color: #0f5e4f; color: #fff; }}
 .tile .v {{ font-size: 16pt; font-weight: 700; line-height: 1.1; }}
 .tile .l {{ font-size: 7.5pt; text-transform: uppercase; letter-spacing: .06em; color: #6b7280; margin-top: 3pt; }}
 .tile.key .l {{ color: #cfe7e1; }}
@@ -403,11 +402,14 @@ td {{ padding: 4pt 6pt; border-bottom: 1px solid #eef0f2; }}
 .muted td {{ color: #8a8f98; font-style: italic; }}
 .total td {{ font-weight: 700; border-top: 1.5px solid #1f2329; border-bottom: none; background: #f6f8f8; }}
 .rate-h {{ width: 26%; }}
-.rate {{ display: flex; align-items: center; gap: 6pt; }}
-.bar {{ flex: 1; height: 6pt; background: #e8eef0; border-radius: 3pt; overflow: hidden; }}
-.bar i {{ display: block; height: 100%; background: #14a37f; border-radius: 3pt; }}
-.rate b {{ width: 34pt; text-align: right; font-weight: 600; }}
+table.rate {{ width: 100%; }}
+table.rate td {{ border: none; padding: 0; vertical-align: middle; }}
+.bar {{ height: 6pt; background: #e8eef0; border-radius: 3pt; overflow: hidden; }}
+.bar div {{ height: 6pt; background: #14a37f; border-radius: 3pt; }}
+table.rate td.pct {{ width: 40pt; text-align: right; font-weight: 600; }}
 .empty {{ text-align: center; color: #8a8f98; padding: 14pt; }}
+/* a short section's heading stays with its table */
+.keep {{ page-break-inside: avoid; }}
 .list td {{ font-size: 8.5pt; }}
 .list .org {{ color: #5b616e; }}
 .pill {{ display: inline-block; padding: 1pt 5pt; border-radius: 6pt; font-size: 7.5pt; background: #eef0f2; white-space: nowrap; }}
@@ -417,19 +419,19 @@ td {{ padding: 4pt 6pt; border-bottom: 1px solid #eef0f2; }}
 .pill.Lost {{ background: #fbe7e7; color: #a33a3a; }}
 .pill.Won {{ background: #e3f4ee; color: #0f5e4f; }}
 </style></head><body>
-<div class="top">
-	<div><div class="brand">{company}</div><h1>CRM Conversion Report</h1></div>
-	<div class="period">Period<b>{escape_html(data["label"])}</b>Generated {generated}</div>
-</div>
+<table class="top"><tr>
+	<td><div class="brand">{company}</div><h1>CRM Conversion Report</h1></td>
+	<td class="period">Period<b>{escape_html(data["label"])}</b>Generated {generated}</td>
+</tr></table>
 
-<div class="tiles">
-	<div class="tile"><div class="v">{s["leads"]}</div><div class="l">New leads</div></div>
-	<div class="tile"><div class="v">{s["converted"]}</div><div class="l">Converted to deals</div></div>
-	<div class="tile key"><div class="v">{s["rate"]:g}%</div><div class="l">Conversion rate</div></div>
-	<div class="tile"><div class="v">{s["deals_created"]}</div><div class="l">Deals created</div></div>
-	<div class="tile"><div class="v">{s["won"]}</div><div class="l">Deals won</div></div>
-	<div class="tile wide"><div class="v money">{money(s["value"])}</div><div class="l">Won value</div></div>
-</div>
+<table class="tiles"><tr>
+	<td class="tile"><div class="v">{s["leads"]}</div><div class="l">New leads</div></td>
+	<td class="tile"><div class="v">{s["converted"]}</div><div class="l">Converted to deals</div></td>
+	<td class="tile key"><div class="v">{s["rate"]:g}%</div><div class="l">Conversion rate</div></td>
+	<td class="tile"><div class="v">{s["deals_created"]}</div><div class="l">Deals created</div></td>
+	<td class="tile"><div class="v">{s["won"]}</div><div class="l">Deals won</div></td>
+	<td class="tile wide"><div class="v money">{money(s["value"])}</div><div class="l">Won value</div></td>
+</tr></table>
 <p class="note">{best_line}</p>
 
 <h2>Sales person wise</h2>
@@ -453,15 +455,9 @@ def pending_section(data: dict) -> str:
 	def pill(stage, text):
 		return f"<span class='pill {escape_html(stage)}'>{escape_html(text)}</span>"
 
-	def bar(rate):
-		width = max(0.0, min(rate, 100.0))
-		return (
-			f'<div class="rate"><span class="bar"><i style="width:{width}%"></i></span><b>{rate:g}%</b></div>'
-		)
-
 	status_rows = "".join(
 		f"<tr><td>{pill(r['stage'], r['name'])}</td><td>{escape_html(r['stage'])}</td>"
-		f"<td class='n'>{r['leads']}</td><td>{bar(r['share'])}</td></tr>"
+		f"<td class='n'>{r['leads']}</td><td>{_bar(r['share'])}</td></tr>"
 		for r in p["by_status"]
 	)
 	stages = p["stages"]
@@ -489,15 +485,19 @@ def pending_section(data: dict) -> str:
 	)
 	converted = data["summary"]["converted"]
 	return f"""
+<div class="keep">
 <h2>Leads not converted</h2>
 <p class="note"><b>{p['total']}</b> of the {data['summary']['leads']} new leads in this period are not a deal yet
 ({converted} converted). Their status now:</p>
 <table><thead><tr><th>Status</th><th>Stage</th><th class='n'>Leads</th><th class='rate-h'>Share</th></tr></thead>
 <tbody>{status_rows}<tr class="total"><td>Total</td><td></td><td class='n'>{p['total']}</td><td></td></tr></tbody></table>
+</div>
 
+<div class="keep">
 <h2>Not converted, by sales person</h2>
 <table><thead><tr><th>Sales person</th>{stage_head}<th class='n'>Total</th></tr></thead>
 <tbody>{people_rows}<tr class="total"><td>Total</td>{stage_totals}<td class='n'>{p['total']}</td></tr></tbody></table>
+</div>
 
 <h2>Lead list</h2>
 <table class="list"><thead><tr><th>Lead</th><th>Sales person</th><th>Territory</th><th>Status</th>
@@ -507,9 +507,25 @@ def pending_section(data: dict) -> str:
 
 
 def render_pdf(data: dict) -> bytes:
-	from weasyprint import HTML
+	"""The PDF, made with Frappe's own PDF tool (wkhtmltopdf, on every Frappe server); the footer
+	carries the report name and page numbers."""
+	from frappe.utils.pdf import get_pdf
 
-	return HTML(string=render_html(data)).write_pdf()
+	footer = f"{company_name()} · CRM conversion report · {data['label']}"
+	return get_pdf(
+		render_html(data),
+		options={
+			"page-size": "A4",
+			"margin-top": "16mm",
+			"margin-bottom": "18mm",
+			"margin-left": "14mm",
+			"margin-right": "14mm",
+			"footer-left": footer,
+			"footer-right": "Page [page] of [topage]",
+			"footer-font-size": "7",
+			"footer-spacing": "6",
+		},
+	)
 
 
 def file_name(data: dict) -> str:
