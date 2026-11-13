@@ -7,6 +7,8 @@ For a period it counts, in total, per sales person and per territory (grouped by
   Converted tick), and the conversion rate (converted / new leads).
 - Deals won: CRM Deals whose status is a Won-type status and whose closed date (set by the CRM when a
   deal is first won) is in the period, and their value.
+- Leads not converted: the period's new leads that are not a deal yet, with their current status,
+  counted per status and per sales person, and listed (the first PENDING_LIMIT of them).
 
 The sales person is the record's Sales Person (custom_sales_person, or sales_person), else its owner.
 
@@ -23,6 +25,7 @@ from frappe.utils import (
 	add_days,
 	add_months,
 	cint,
+	date_diff,
 	escape_html,
 	flt,
 	fmt_money,
@@ -42,6 +45,13 @@ TEMPLATE = "WhatsApp Templates"
 WEEKDAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
 NO_PERSON = "Not assigned"
 NO_TERRITORY = "No territory"
+NO_STATUS = "No status"
+# a lead list longer than this is cut, so a monthly report stays a few pages; the rest are in the CRM
+PENDING_LIMIT = 100
+# CRM Lead Status types, in the order a lead moves through them; a Won-type status on a lead that has
+# no deal yet is shown as its own column
+STAGES = ("Open", "Ongoing", "On Hold", "Lost", "Won")
+STAGE_LABELS = {"Won": "Won, no deal yet"}
 PRESETS = {
 	"yesterday": "Yesterday",
 	"last_7_days": "Last 7 days",
@@ -185,6 +195,7 @@ def build(from_date, to_date) -> dict:
 
 	total_leads = len(leads)
 	total_converted = sum(1 for r in leads if r.converted)
+	pending = not_converted([r for r in leads if not r.converted], person_of, territory_of)
 	currencies = Counter(r.currency for r in won if r.currency)
 	return {
 		"from_date": str(from_date),
@@ -203,6 +214,73 @@ def build(from_date, to_date) -> dict:
 		},
 		"people": table(person_of),
 		"territories": territories,
+		"pending": pending,
+	}
+
+
+def not_converted(rows, person_of, territory_of) -> dict:
+	"""The period's leads that are not a deal yet: a count per status (in the CRM's status order),
+	per sales person by status type, and the leads themselves (oldest first within each status)."""
+	statuses = {
+		s.name: s
+		for s in frappe.get_all("CRM Lead Status", fields=["name", "type", "position"], order_by="position")
+	}
+	details = {
+		d.name: d
+		for d in frappe.get_all(
+			"CRM Lead",
+			filters={"name": ("in", [r.name for r in rows] or [""])},
+			fields=["name", "lead_name", "first_name", "organization", "status", "creation"],
+		)
+	}
+	order = {name: i for i, name in enumerate(statuses)}
+	today_ = getdate(today())
+
+	leads, by_status, people = [], Counter(), defaultdict(Counter)
+	for r in rows:
+		d = details.get(r.name) or frappe._dict()
+		status = d.status or NO_STATUS
+		stage = (statuses.get(status) or frappe._dict()).type or "Open"
+		person = person_of(r)
+		by_status[status] += 1
+		people[person][stage] += 1
+		leads.append(
+			{
+				"name": r.name,
+				"lead": d.lead_name or d.first_name or r.name,
+				"organization": d.organization or "",
+				"person": person,
+				"territory": territory_of(r),
+				"status": status,
+				"stage": stage,
+				"created": str(getdate(d.creation)) if d.creation else "",
+				"days": date_diff(today_, getdate(d.creation)) if d.creation else 0,
+			}
+		)
+	leads.sort(key=lambda r: (order.get(r["status"], len(order)), r["created"], r["name"]))
+
+	total = len(rows)
+	status_rows = [
+		{
+			"name": name,
+			"stage": (statuses.get(name) or frappe._dict()).type or "Open",
+			"leads": n,
+			"share": _rate(n, total),
+		}
+		for name, n in sorted(by_status.items(), key=lambda kv: (order.get(kv[0], len(order)), kv[0]))
+	]
+	stages = [s for s in STAGES if any(c[s] for c in people.values())]
+	people_rows = [
+		{"name": k, **{s: c[s] for s in stages}, "total": sum(c.values())} for k, c in people.items()
+	]
+	people_rows.sort(key=lambda r: (r["name"] == NO_PERSON, -r["total"], r["name"]))
+	return {
+		"total": total,
+		"stages": stages,
+		"by_status": status_rows,
+		"people": people_rows,
+		"leads": leads[:PENDING_LIMIT],
+		"more": max(total - PENDING_LIMIT, 0),
 	}
 
 
@@ -330,7 +408,14 @@ td {{ padding: 4pt 6pt; border-bottom: 1px solid #eef0f2; }}
 .bar i {{ display: block; height: 100%; background: #14a37f; border-radius: 3pt; }}
 .rate b {{ width: 34pt; text-align: right; font-weight: 600; }}
 .empty {{ text-align: center; color: #8a8f98; padding: 14pt; }}
-.defs {{ margin-top: 16pt; font-size: 7.5pt; color: #8a8f98; line-height: 1.5; }}
+.list td {{ font-size: 8.5pt; }}
+.list .org {{ color: #5b616e; }}
+.pill {{ display: inline-block; padding: 1pt 5pt; border-radius: 6pt; font-size: 7.5pt; background: #eef0f2; white-space: nowrap; }}
+.pill.Open {{ background: #e6f0fb; color: #1d5fa8; }}
+.pill.Ongoing {{ background: #fdf3dc; color: #8a5a00; }}
+.pill.On.Hold {{ background: #eceef1; color: #4b5260; }}
+.pill.Lost {{ background: #fbe7e7; color: #a33a3a; }}
+.pill.Won {{ background: #e3f4ee; color: #0f5e4f; }}
 </style></head><body>
 <div class="top">
 	<div><div class="brand">{company}</div><h1>CRM Conversion Report</h1></div>
@@ -355,13 +440,70 @@ td {{ padding: 4pt 6pt; border-bottom: 1px solid #eef0f2; }}
 <table><thead><tr><th>Territory</th>{head}</tr></thead>
 <tbody>{territory_rows()}{totals()}</tbody></table>
 
-<div class="defs">
-	New leads: leads created in the period. Converted: those new leads that have since become a deal.
-	Conversion: converted ÷ new leads. Deals won: deals moved to a won status (for example Order
-	Confirmed) in the period, by the deal's own sales person and territory. Won value: the deal value,
-	else the expected deal value.
-</div>
+{pending_section(data)}
 </body></html>"""
+
+
+def pending_section(data: dict) -> str:
+	"""The "Leads not converted" part of the report (empty when every new lead is converted)."""
+	p = data.get("pending") or {}
+	if not p.get("total"):
+		return ""
+
+	def pill(stage, text):
+		return f"<span class='pill {escape_html(stage)}'>{escape_html(text)}</span>"
+
+	def bar(rate):
+		width = max(0.0, min(rate, 100.0))
+		return (
+			f'<div class="rate"><span class="bar"><i style="width:{width}%"></i></span><b>{rate:g}%</b></div>'
+		)
+
+	status_rows = "".join(
+		f"<tr><td>{pill(r['stage'], r['name'])}</td><td>{escape_html(r['stage'])}</td>"
+		f"<td class='n'>{r['leads']}</td><td>{bar(r['share'])}</td></tr>"
+		for r in p["by_status"]
+	)
+	stages = p["stages"]
+	stage_head = "".join(f"<th class='n'>{escape_html(STAGE_LABELS.get(s, s))}</th>" for s in stages)
+	people_rows = "".join(
+		f"<tr class='{'muted' if r['name'] == NO_PERSON else ''}'><td>{escape_html(r['name'])}</td>"
+		+ "".join(f"<td class='n'>{r[s] or ''}</td>" for s in stages)
+		+ f"<td class='n'><b>{r['total']}</b></td></tr>"
+		for r in p["people"]
+	)
+	stage_totals = "".join(f"<td class='n'>{sum(r[s] for r in p['people'])}</td>" for s in stages)
+	lead_rows = "".join(
+		f"<tr><td>{escape_html(r['lead'])}<div class='org'>{escape_html(r['organization'])}</div></td>"
+		f"<td>{escape_html(r['person'])}</td><td>{escape_html(r['territory'])}</td>"
+		f"<td>{pill(r['stage'], r['status'])}</td>"
+		f"<td class='n'>{escape_html(format_date(r['created'], 'd MMM')) if r['created'] else ''}</td>"
+		f"<td class='n'>{r['days']}</td></tr>"
+		for r in p["leads"]
+	)
+	more = (
+		f"<p class='note'>Showing the first {len(p['leads'])} of {p['total']} leads. "
+		f"The other {p['more']} are in the CRM.</p>"
+		if p["more"]
+		else ""
+	)
+	converted = data["summary"]["converted"]
+	return f"""
+<h2>Leads not converted</h2>
+<p class="note"><b>{p['total']}</b> of the {data['summary']['leads']} new leads in this period are not a deal yet
+({converted} converted). Their status now:</p>
+<table><thead><tr><th>Status</th><th>Stage</th><th class='n'>Leads</th><th class='rate-h'>Share</th></tr></thead>
+<tbody>{status_rows}<tr class="total"><td>Total</td><td></td><td class='n'>{p['total']}</td><td></td></tr></tbody></table>
+
+<h2>Not converted, by sales person</h2>
+<table><thead><tr><th>Sales person</th>{stage_head}<th class='n'>Total</th></tr></thead>
+<tbody>{people_rows}<tr class="total"><td>Total</td>{stage_totals}<td class='n'>{p['total']}</td></tr></tbody></table>
+
+<h2>Lead list</h2>
+<table class="list"><thead><tr><th>Lead</th><th>Sales person</th><th>Territory</th><th>Status</th>
+<th class='n'>Created</th><th class='n'>Days</th></tr></thead>
+<tbody>{lead_rows}</tbody></table>
+{more}"""
 
 
 def render_pdf(data: dict) -> bytes:
