@@ -108,6 +108,34 @@ class TestReport(CRMTestCase):
 		for text in ("Sales person wise", "Territory wise", self.region, self.city):
 			self.assertIn(text, html)
 
+	def test_leads_not_converted(self):
+		status = frappe.db.get_value("CRM Lead", self.leads[1].name, "status")
+		data = cr.build(DAY, DAY)
+		pending = data["pending"]
+		# 4 new leads, 1 converted: the other 3 are listed with their status and sales person
+		self.assertEqual(pending["total"], 3)
+		self.assertEqual(
+			sorted(r["name"] for r in pending["leads"]), sorted(lead.name for lead in self.leads[1:])
+		)
+		self.assertNotIn(self.leads[0].name, [r["name"] for r in pending["leads"]])
+		self.assertEqual(sum(r["leads"] for r in pending["by_status"]), 3)
+		self.assertIn(status, [r["name"] for r in pending["by_status"]])
+		self.assertEqual(sum(r["total"] for r in pending["people"]), 3)
+		self.assertEqual(pending["more"], 0)
+		self.assertIn("<h2>Leads not converted</h2>", cr.render_html(data))
+
+	def test_long_lead_list_is_cut(self):
+		with patch.object(cr, "PENDING_LIMIT", 2):
+			pending = cr.build(DAY, DAY)["pending"]
+		self.assertEqual((len(pending["leads"]), pending["more"]), (2, 1))
+
+	def test_no_section_when_all_converted(self):
+		for lead in self.leads:
+			frappe.db.set_value("CRM Lead", lead.name, "converted", 1)
+		data = cr.build(DAY, DAY)
+		self.assertEqual(data["pending"]["total"], 0)
+		self.assertNotIn("<h2>Leads not converted</h2>", cr.render_html(data))
+
 	def test_send_uploads_once_and_sends_to_each_recipient(self):
 		_template()
 		cfg = frappe.get_single(cr.SETTINGS)
