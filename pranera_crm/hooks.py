@@ -10,7 +10,12 @@ website_route_rules = [{"from_route": "/crm-open/<name>", "to_route": "crm_open"
 standard_queries = {"CRM Lost Reason": "pranera_crm.lost_reasons.search"}
 
 doc_events = {
-	"CRM Lead": {"validate": "pranera_crm.lost_reasons.validate"},
+	"CRM Lead": {
+		"validate": "pranera_crm.lost_reasons.validate",
+		# a lead's contact joins the organization / customer its Organization names (lead_contact.py)
+		"after_insert": "pranera_crm.lead_contact.on_lead_change",
+		"on_update": "pranera_crm.lead_contact.on_lead_change",
+	},
 	"CRM Deal": {"validate": "pranera_crm.lost_reasons.validate"},
 }
 
