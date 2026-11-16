@@ -235,16 +235,7 @@
 										v-for="field in otherAddressFields"
 										:key="field.fieldname"
 										v-model="customer.address.values[field.fieldname]"
-										:field="
-											addressLocked
-												? {
-														...field,
-														description: __(
-															'Auto-filled from the GSTIN above.'
-														),
-												  }
-												: field
-										"
+										:field="addressField(field)"
 										:disabled="addressLocked"
 										:class="
 											['address_line1', 'address_line2'].includes(
@@ -259,7 +250,13 @@
 									/>
 								</div>
 								<p v-if="!addressLocked" class="text-sm text-ink-gray-5">
-									{{ __('Optional — leave the address blank to skip it.') }}
+									{{
+										addressRequired
+											? __(
+													"Required: with no GSTIN, the customer's address is entered here."
+											  )
+											: __('Optional — leave the address blank to skip it.')
+									}}
 								</p>
 							</template>
 						</template>
@@ -281,6 +278,7 @@ import { useDynamicOptionsRefresh } from '@/composables/useDynamicOptionsRefresh
 import { api, errorMessage } from '@/lib/api'
 import { matchReason } from '@/lib/layout'
 import { descendantKeys, visibleQuestions } from '@/lib/questions'
+import { needsAddress } from '@/lib/validation'
 import { __ } from '@/translation'
 
 const w = inject('wizard')
@@ -304,6 +302,17 @@ const useExisting = computed({
 	},
 })
 
+const addressRequired = computed(() => needsAddress(form))
+// with no GSTIN these make the customer's address: marked required like the server-side ones
+const REQUIRED_ADDRESS = ['address_line1', 'city', 'pincode', 'country']
+function addressField(field) {
+	if (addressLocked.value)
+		return { ...field, description: __('Auto-filled from the GSTIN above.') }
+	const required =
+		REQUIRED_ADDRESS.includes(field.fieldname) ||
+		(field.fieldname === 'state' && customer.address.values.country === 'India')
+	return addressRequired.value && required ? { ...field, reqd: 1 } : field
+}
 const addressUseExisting = computed({
 	get: () => customer.address.mode === 'existing',
 	set: (on) => {

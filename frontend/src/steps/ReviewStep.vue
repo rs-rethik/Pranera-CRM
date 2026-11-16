@@ -5,33 +5,69 @@
 		<ReviewCard :title="__('Lead')" :step="null" :rows="leadRows" />
 
 		<ReviewCard
-			:title="__('Organization')"
+			:title="__('GSTIN')"
 			:step="0"
+			:rows="gstinRows"
+			@edit="(i) => emit('edit', i)"
+		/>
+
+		<!-- an existing customer (GSTIN step): shown as it is, nothing about it is created -->
+		<template v-if="existingCustomer">
+			<ReviewCard
+				:title="__('Existing customer')"
+				:step="null"
+				:rows="existingCustomerRows"
+				:note="
+					__(
+						'No new customer will be created. The deal is linked to this customer and its organization.'
+					)
+				"
+			/>
+			<ReviewCard
+				v-if="existingCustomer.addresses?.length"
+				:title="__('Addresses')"
+				:step="null"
+				:rows="existingAddressRows"
+			/>
+			<ReviewCard
+				v-if="existingCustomer.contacts?.length"
+				:title="__('Contacts')"
+				:step="null"
+				:rows="existingContactRows"
+			/>
+		</template>
+		<ReviewCard
+			v-else
+			:title="__('Organization')"
+			:step="1"
 			:rows="orgRows"
 			:note="orgNote"
 			@edit="(i) => emit('edit', i)"
 		/>
 		<ReviewCard
-			:title="__('Contact')"
-			:step="1"
+			:title="existingCustomer ? __('Contact for this deal') : __('Contact')"
+			:step="contactEditable ? 2 : null"
 			:rows="contactRows"
 			:note="contactNote"
 			@edit="(i) => emit('edit', i)"
 		/>
 		<ReviewCard
 			:title="__('Deal')"
-			:step="2"
+			:step="3"
 			:rows="dealRows"
 			@edit="(i) => emit('edit', i)"
 		/>
 
 		<!-- the ERPNext values the wizard will assign, resolved from the questions -->
-		<section v-if="customer.enabled && ctx.customer?.enabled" class="space-y-4">
+		<section
+			v-if="customer.enabled && ctx.customer?.enabled && !existingCustomer"
+			class="space-y-4"
+		>
 			<div class="mb-1 flex items-center justify-between">
 				<h3 class="text-base font-medium text-ink-gray-8">
 					{{ __('Customer (ERPNext)') }}
 				</h3>
-				<Button variant="ghost" size="sm" @click="emit('edit', 0)">{{
+				<Button variant="ghost" size="sm" @click="emit('edit', 1)">{{
 					__('Edit')
 				}}</Button>
 			</div>
@@ -144,6 +180,61 @@ const fieldRows = (fields, values) =>
 			value: show(f, values[f.fieldname]),
 		}))
 	)
+
+const gstin = form.gstin
+const existingCustomer = computed(
+	() => (gstin.customer && gstin.existing.find((c) => c.customer === gstin.customer)) || null
+)
+// with an existing customer the Contact step only shows when a new contact is made
+const contactEditable = computed(() => !existingCustomer.value || form.contact.mode !== 'existing')
+
+const gstinRows = computed(() => {
+	if (gstin.none) return [{ label: __('GSTIN'), value: __('None (unregistered or individual)') }]
+	const rows = [{ label: __('GSTIN'), value: show(null, gstin.checked) }]
+	if (gstin.registered) {
+		rows.push({
+			label: __('GST portal'),
+			value: show(
+				null,
+				[gstin.registered.business_name, gstin.registered.status]
+					.filter(Boolean)
+					.join(' · ')
+			),
+		})
+	}
+	return rows
+})
+
+const addressText = (a) =>
+	[a.address_line1, a.address_line2, a.city, a.state, a.pincode].filter(Boolean).join(', ')
+
+const existingCustomerRows = computed(() => {
+	const c = existingCustomer.value
+	return filled([
+		{ label: __('Customer'), value: show(null, c.customer_name) },
+		{ label: __('ID'), value: c.customer !== c.customer_name ? c.customer : '—' },
+		{
+			label: __('Organization'),
+			value: c.organization || __('A new organization with the customer name'),
+		},
+		{ label: __('Customer Group'), value: show(null, c.customer_group) },
+		{ label: __('Territory'), value: show(null, c.territory) },
+		{ label: __('Sales Person'), value: show(null, (c.sales_persons || []).join(', ')) },
+		{ label: __('Status'), value: c.disabled ? __('Disabled') : '—' },
+	])
+})
+const existingAddressRows = computed(() =>
+	existingCustomer.value.addresses.map((a) => ({
+		label: [a.address_type, a.gstin].filter(Boolean).join(' · ') || a.name,
+		value: addressText(a) || a.name,
+	}))
+)
+const existingContactRows = computed(() =>
+	existingCustomer.value.contacts.map((c) => ({
+		label: c.full_name || c.name,
+		value: [c.mobile_no || c.phone, c.email_id].filter(Boolean).join(' · ') || '—',
+	}))
+)
 
 const leadRows = computed(() => [
 	{ label: __('Name'), value: show(null, ctx.lead.lead_name || ctx.lead.name) },

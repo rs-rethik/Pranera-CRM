@@ -96,6 +96,145 @@ def lookup_gstin(gstin: str) -> dict:
 	return result
 
 
+@frappe.whitelist()
+@rate_limit(limit=30, seconds=300, methods=["POST"])
+def check_gstin(gstin: str) -> dict:
+	"""The wizard's first step. Customers that already have this GSTIN (on the Customer or one of its
+	Addresses) come back in ``existing``, with what the review shows of them, and India Compliance is
+	not asked. Only a GSTIN no customer has is looked up on the GST portal (``registered``: name, GST
+	category, status and principal address; the portal has no phone numbers or emails)."""
+	if not frappe.has_permission(CUSTOMER, "read"):
+		frappe.throw(_("Not allowed"), frappe.PermissionError)
+	gstin = (gstin or "").strip().upper()
+	if not GSTIN_FORMAT.match(gstin):
+		frappe.throw(_("{0} is not a valid GSTIN.").format(frappe.bold(gstin)))
+	existing = [customer_summary(name) for name in _customers_with_gstin(gstin)]
+	return {
+		"gstin": gstin,
+		"existing": existing,
+		"registered": None if existing else lookup_gstin(gstin),
+	}
+
+
+SUMMARY_LIMIT = 10
+
+
+@frappe.whitelist()
+def customers_for_lead(lead: str) -> list[dict]:
+	"""For a lead with no GSTIN: customers it may already be, so none is created twice. Customers
+	linked to a contact with the lead's mobile number (last 10 digits), and customers named like the
+	lead's organization (or the company typed at the gate)."""
+	if not frappe.has_permission("CRM Lead", "read", lead):
+		frappe.throw(_("Not allowed"), frappe.PermissionError)
+	if not frappe.has_permission(CUSTOMER, "read"):
+		frappe.throw(_("Not allowed"), frappe.PermissionError)
+	from pranera_crm.lead_contact import contacts_with_mobile
+
+	lead_doc = frappe.get_doc("CRM Lead", lead)
+	found: dict[str, str] = {}
+	contacts = contacts_with_mobile(lead_doc.mobile_no or lead_doc.phone)
+	if contacts:
+		for name in frappe.get_all(
+			"Dynamic Link",
+			filters={"parenttype": CONTACT, "parent": ["in", contacts], "link_doctype": CUSTOMER},
+			pluck="link_name",
+		):
+			found.setdefault(name, "mobile")
+	for company in (lead_doc.get("organization"), lead_doc.get("custom_temp_organization")):
+		if not (company or "").strip():
+			continue
+		for name in frappe.get_all(CUSTOMER, filters={"customer_name": company.strip()}, pluck="name"):
+			found.setdefault(name, "name")
+	return [
+		{**customer_summary(name), "matched_by": reason}
+		for name, reason in list(found.items())[:SUMMARY_LIMIT]
+	]
+
+
+def customer_summary(customer: str) -> dict:
+	"""What the wizard's review shows of an existing Customer: name, group, territory, sales team,
+	its CRM Organization (if any), and its addresses and contacts."""
+	doc = frappe.get_doc(CUSTOMER, customer)
+	addresses = _linked(ADDRESS, customer)
+	contacts = _linked(CONTACT, customer)
+	return {
+		"customer": doc.name,
+		"customer_name": doc.customer_name,
+		"disabled": doc.disabled,
+		"customer_group": doc.customer_group,
+		"territory": doc.territory,
+		"sales_persons": [row.sales_person for row in doc.get("sales_team") or []],
+		"organization": organization_of_customer(doc.name),
+		"addresses": frappe.get_all(
+			ADDRESS,
+			filters={"name": ["in", addresses or [""]]},
+			fields=[
+				"name",
+				"address_type",
+				"address_line1",
+				"address_line2",
+				"city",
+				"state",
+				"pincode",
+				"gstin",
+			],
+			limit=SUMMARY_LIMIT,
+		),
+		"contacts": frappe.get_all(
+			CONTACT,
+			filters={"name": ["in", contacts or [""]]},
+			fields=["name", "full_name", "mobile_no", "phone", "email_id", "designation"],
+			limit=SUMMARY_LIMIT,
+		),
+	}
+
+
+def _linked(doctype: str, customer: str) -> list[str]:
+	return frappe.get_all(
+		"Dynamic Link",
+		filters={"parenttype": doctype, "link_doctype": CUSTOMER, "link_name": customer},
+		pluck="parent",
+	)
+
+
+def organization_of_customer(customer: str) -> str | None:
+	"""The CRM Organization of a Customer: the one mapped to it (CRM Organization → Customer, where the
+	site has that field), else the one with the customer's name."""
+	if frappe.get_meta(ORGANIZATION).has_field("custom_customer"):
+		mapped = frappe.db.get_value(ORGANIZATION, {"custom_customer": customer}, "name")
+		if mapped:
+			return mapped
+	customer_name = frappe.db.get_value(CUSTOMER, customer, "customer_name")
+	return frappe.db.exists(ORGANIZATION, customer_name) if customer_name else None
+
+
+def organization_for_existing_customer(customer: str) -> str:
+	"""The CRM Organization a deal for an existing Customer goes under: its own, else a new one with
+	the customer's name (mapped to the Customer where the site has that field)."""
+	existing = organization_of_customer(customer)
+	if existing:
+		return existing
+	org = frappe.new_doc(ORGANIZATION)
+	org.organization_name = frappe.db.get_value(CUSTOMER, customer, "customer_name") or customer
+	if org.meta.has_field("custom_customer"):
+		org.custom_customer = customer
+	org.insert()
+	return org.name
+
+
+def link_existing_customer(deal: str, customer: str) -> dict:
+	"""A deal for a Customer that already exists: link the deal and its contacts to it. Nothing about
+	the Customer itself changes, and no Customer is created."""
+	deal_doc = frappe.get_doc(DEAL, deal)
+	if frappe.get_meta(DEAL).has_field("erpnext_customer"):
+		frappe.db.set_value(DEAL, deal, "erpnext_customer", customer)
+	for row in deal_doc.get("contacts") or []:
+		contact = frappe.get_doc(CONTACT, row.contact)
+		if _append_link_if_missing(contact, CUSTOMER, customer):
+			contact.save()
+	return {"customer": customer}
+
+
 def get_context(organization: str | None) -> dict:
 	"""Everything the wizard needs to render the Organization/Contact steps' question-
 	driven fields, and (when the ERPNext bridge is on) the "set up this customer in

@@ -3,6 +3,7 @@ import { flattenLayout, isClientRequired, isEmpty } from './layout'
 import { unansweredMandatory } from './questions'
 
 export const STEPS = [
+	{ key: 'gstin', label: 'GSTIN' },
 	{ key: 'organization', label: 'Organization' },
 	{ key: 'contact', label: 'Contact' },
 	{ key: 'deal', label: 'Deal details' },
@@ -18,6 +19,27 @@ export const normalizeEmail = (email) =>
 export const isValidEmail = (email) => EMAIL.test(String(email).trim())
 
 const GST_GATE_KEY = 'gst_registered'
+export const GSTIN_FORMAT = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/
+
+const ADDRESS_LABELS = {
+	address_line1: 'Address Line 1',
+	city: 'City',
+	pincode: 'Postal Code',
+	country: 'Country',
+}
+
+/** No GSTIN and a new customer: nothing fills the customer's address, so the Organization step asks
+ * for it. */
+export const needsAddress = (form) => !!form?.gstin?.none && !form.gstin.customer
+
+/** With an existing customer chosen on the GSTIN step, its organization is used as it is: the
+ * Organization step is skipped, and so is the Contact step when the lead's contact already exists
+ * (a new contact still needs its details and email check there). */
+export function isSkipped(index, form) {
+	const key = STEPS[index]?.key
+	if (!form?.gstin?.customer) return false
+	return key === 'organization' || (key === 'contact' && form.contact?.mode === 'existing')
+}
 
 /** Bridge-independent questions (Territory, Industry, ...) always apply; the rest
  * only when the "Set up this customer in ERPNext" toggle is on for this conversion. */
@@ -32,8 +54,28 @@ function bridgeAwareQuestions(questions, bridgeToggleOn) {
  */
 export function validateStep(index, form, ctx) {
 	const errors = {}
+	const key = STEPS[index]?.key
+	if (isSkipped(index, form)) return errors
 
-	if (index === 0) {
+	if (key === 'gstin') {
+		const g = form.gstin
+		if (g.none) {
+			if (g.existing.length && !g.customer && !g.newCustomer) {
+				errors.gstin_customer = __('Choose the existing customer, or "New customer"')
+			}
+		} else {
+			const value = (g.value || '').trim().toUpperCase()
+			if (!GSTIN_FORMAT.test(value)) {
+				errors.gstin = __('Enter a valid 15-character GSTIN, or choose "No GSTIN"')
+			} else if (g.checked !== value) {
+				errors.gstin = __('Check the GSTIN to continue')
+			} else if (g.existing.length && !g.customer) {
+				errors.gstin_customer = __('Choose the customer this deal is for')
+			}
+		}
+	}
+
+	if (key === 'organization') {
 		const org = form.organization
 		if (org.mode === 'existing') {
 			if (!org.existing) errors.existing = __('Please select an existing organization')
@@ -55,6 +97,18 @@ export function validateStep(index, form, ctx) {
 			}
 		}
 
+		// no GSTIN and a new customer: its address is entered here, so it is required
+		if (form.customer?.enabled && needsAddress(form) && address?.mode !== 'existing') {
+			for (const field of ['address_line1', 'city', 'pincode', 'country']) {
+				if (isEmpty(address?.values[field]))
+					errors[`customer_${field}`] = __('{0} is required', [
+						__(ADDRESS_LABELS[field]),
+					])
+			}
+			if (address?.values.country === 'India' && isEmpty(address?.values.state))
+				errors.customer_state = __('{0} is required', [__('State')])
+		}
+
 		if (
 			form.customer?.enabled &&
 			address?.mode !== 'existing' &&
@@ -73,7 +127,7 @@ export function validateStep(index, form, ctx) {
 		}
 	}
 
-	if (index === 1) {
+	if (key === 'contact') {
 		const contact = form.contact
 		if (contact.mode === 'existing') {
 			if (!contact.existing) errors.existing = __('Please select an existing contact')
@@ -100,7 +154,7 @@ export function validateStep(index, form, ctx) {
 		}
 	}
 
-	if (index === 2) {
+	if (key === 'deal') {
 		for (const field of flattenLayout(ctx?.deal_layout)) {
 			if (isClientRequired(field) && isEmpty(form.deal[field.fieldname])) {
 				errors[field.fieldname] = __('{0} is required', [
@@ -124,11 +178,26 @@ export function firstInvalidStep(form, ctx) {
 	return STEPS.length - 1
 }
 
-/** Parse a `?step=` value (1-based) into a valid 0-based index, never past the first invalid step. */
+/** Parse a `?step=` value (1-based) into a valid 0-based index, never past the first invalid step
+ * and never a skipped one. */
 export function resolveStep(queryStep, form, ctx) {
 	const requested = Number.parseInt(queryStep, 10)
 	const wanted = Number.isFinite(requested)
 		? Math.min(Math.max(requested, 1), STEPS.length) - 1
 		: 0
-	return Math.min(wanted, firstInvalidStep(form, ctx))
+	return stepAfter(Math.min(wanted, firstInvalidStep(form, ctx)) - 1, form)
+}
+
+/** The next step after `index` that is not skipped. */
+export function stepAfter(index, form) {
+	let i = index + 1
+	while (i < STEPS.length - 1 && isSkipped(i, form)) i++
+	return i
+}
+
+/** The step before `index` that is not skipped. */
+export function stepBefore(index, form) {
+	let i = index - 1
+	while (i > 0 && isSkipped(i, form)) i--
+	return Math.max(i, 0)
 }

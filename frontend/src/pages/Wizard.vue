@@ -188,16 +188,24 @@ import { api, errorMessage } from '@/lib/api'
 import { debounce } from '@/lib/debounce'
 import { clearDraft, loadDraft, saveDraft, saveDraftSync } from '@/lib/drafts'
 import { applyDraft, createForm, customerPayload, toPayload } from '@/lib/form'
-import { STEPS, isStepValid, resolveStep, validateStep } from '@/lib/validation'
+import {
+	STEPS,
+	isStepValid,
+	resolveStep,
+	stepAfter,
+	stepBefore,
+	validateStep,
+} from '@/lib/validation'
 import { __ } from '@/translation'
 import ContactStep from '@/steps/ContactStep.vue'
 import DealStep from '@/steps/DealStep.vue'
+import GstinStep from '@/steps/GstinStep.vue'
 import OrganizationStep from '@/steps/OrganizationStep.vue'
 import ReviewStep from '@/steps/ReviewStep.vue'
 
 const props = defineProps({ name: { type: String, required: true } })
 
-const STEP_COMPONENTS = [OrganizationStep, ContactStep, DealStep, ReviewStep]
+const STEP_COMPONENTS = [GstinStep, OrganizationStep, ContactStep, DealStep, ReviewStep]
 
 const route = useRoute()
 const router = useRouter()
@@ -307,16 +315,17 @@ function next() {
 		)
 		return
 	}
-	goTo(stepIndex.value + 1)
+	goTo(stepAfter(stepIndex.value, wizard.form))
 }
 
 function back() {
+	const target = stepBefore(stepIndex.value, wizard.form)
 	const previous = window.history.state?.back
 	const previousStep = previous
 		? new URL(previous, window.location.origin).searchParams.get('step')
 		: null
-	if (previousStep === String(stepIndex.value)) router.back()
-	else goTo(stepIndex.value - 1, { replace: true })
+	if (previousStep === String(target + 1)) router.back()
+	else goTo(target, { replace: true })
 }
 
 const refreshCandidates = debounce(async () => {

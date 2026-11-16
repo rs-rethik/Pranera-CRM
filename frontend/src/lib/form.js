@@ -14,6 +14,16 @@ export function createForm(ctx) {
 	)
 
 	return reactive({
+		// the wizard's first step: the GSTIN, checked against existing customers and the GST portal
+		gstin: {
+			value: '',
+			none: false,
+			checked: '',
+			existing: [],
+			customer: '',
+			newCustomer: false,
+			registered: null,
+		},
 		organization: {
 			mode: auto_organization ? 'existing' : 'new',
 			existing: auto_organization || '',
@@ -58,6 +68,16 @@ export function applyDraft(form, draft) {
 			saved.contact.emailVerification.verifiedEmail
 	}
 	if (saved.deal && typeof saved.deal === 'object') Object.assign(form.deal, saved.deal)
+	if (saved.gstin && typeof saved.gstin === 'object') {
+		const g = saved.gstin
+		if (typeof g.value === 'string') form.gstin.value = g.value
+		form.gstin.none = !!g.none
+		form.gstin.newCustomer = !!g.newCustomer
+		if (typeof g.checked === 'string') form.gstin.checked = g.checked
+		if (Array.isArray(g.existing)) form.gstin.existing = g.existing
+		if (typeof g.customer === 'string') form.gstin.customer = g.customer
+		if (g.registered && typeof g.registered === 'object') form.gstin.registered = g.registered
+	}
 
 	if (saved.customer && typeof saved.customer === 'object') {
 		for (const key of ['answers', 'contactAnswers', 'overrides']) {
@@ -101,13 +121,17 @@ export function toPayload(form, lead) {
 		if (!isEmpty(value)) deal[key] = blank(value)
 	}
 
+	const existingCustomer = form.gstin?.customer || ''
 	return {
 		lead,
 		deal,
 		existing_organization:
-			form.organization.mode === 'existing' ? form.organization.existing : '',
+			!existingCustomer && form.organization.mode === 'existing'
+				? form.organization.existing
+				: '',
 		existing_contact: form.contact.mode === 'existing' ? form.contact.existing : '',
-		lead_updates: leadUpdates,
+		lead_updates: existingCustomer ? {} : leadUpdates,
+		existing_customer: existingCustomer,
 		...customerPayload(form),
 	}
 }
@@ -117,7 +141,8 @@ export function customerPayload(form) {
 	const customer = form.customer
 	const address = customer?.address
 	return {
-		setup_customer: !!customer?.enabled,
+		// an existing customer (GSTIN step) is linked, never set up again
+		setup_customer: !!customer?.enabled && !form.gstin?.customer,
 		customer_answers: cleaned(customer?.answers),
 		contact_customer_answers: cleaned(customer?.contactAnswers),
 		customer_address: address?.mode === 'existing' ? {} : cleaned(address?.values),

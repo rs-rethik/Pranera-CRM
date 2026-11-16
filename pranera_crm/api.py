@@ -6,6 +6,7 @@ lacks: an "already converted" guard, server-side validation of the payload and
 the ability to edit the data a *new* Organization / Contact is built from.
 """
 
+import re
 from urllib.parse import urlparse
 
 import frappe
@@ -235,14 +236,16 @@ def _contact_candidates(email, phone, mobile_no):
 
 	lookups = (
 		("Contact Email", "email_id", email, "email"),
-		("Contact Phone", "phone", phone, "phone"),
-		("Contact Phone", "phone", mobile_no, "mobile"),
+		("Contact Phone", "phone", _last_digits(phone), "phone"),
+		("Contact Phone", "phone", _last_digits(mobile_no), "mobile"),
 	)
 	for doctype, fieldname, value, reason in lookups:
 		if not value:
 			continue
+		# a number matches on its last 10 digits: the gate saves 91XXXXXXXXXX, CRM +91-XXXXXXXXXX
+		condition = ["like", f"%{value}"] if doctype == "Contact Phone" else value
 		for parent in frappe.get_all(
-			doctype, filters={fieldname: value, "parenttype": "Contact"}, pluck="parent"
+			doctype, filters={fieldname: condition, "parenttype": "Contact"}, pluck="parent"
 		):
 			parents.setdefault(parent, reason)
 			if auto_contact is None:
@@ -261,6 +264,12 @@ def _contact_candidates(email, phone, mobile_no):
 	if auto_contact not in permitted:
 		auto_contact = None
 	return contacts, auto_contact
+
+
+def _last_digits(number) -> str | None:
+	"""The last 10 digits of a phone number, or None when it has fewer."""
+	digits = re.sub(r"\D", "", number or "")[-10:]
+	return digits if len(digits) == 10 else None
 
 
 def _domain(website):
@@ -286,9 +295,14 @@ def convert(
 	customer_overrides: str | dict | None = None,
 	customer_existing_address: str | None = None,
 	confirm_duplicate_customer: bool = False,
+	existing_customer: str | None = None,
 ) -> dict:
 	"""Convert ``lead`` into a Deal via CRM's ``convert_to_deal``, then (optionally)
 	set up the matching ERPNext Customer/Address/Contact.
+
+	``existing_customer`` (the wizard's GSTIN step found the GSTIN on a Customer): the deal goes
+	under that Customer's CRM Organization (made when it has none) and is linked to the Customer;
+	no Customer is created or changed.
 
 	``lead_updates`` are applied to the Lead first (permission-checked) because CRM
 	builds a *new* Organization / Contact purely from the Lead's own fields.
@@ -321,7 +335,12 @@ def convert(
 	existing_contact = existing_contact or None
 	existing_organization = existing_organization or None
 	customer_existing_address = customer_existing_address or None
+	existing_customer = existing_customer or None
 	_validate_existing_record("Contact", existing_contact)
+	_validate_existing_record("Customer", existing_customer)
+	if existing_customer:
+		existing_organization = erpnext_customer.organization_for_existing_customer(existing_customer)
+		setup_customer = False
 	_validate_existing_record(ORGANIZATION, existing_organization)
 	_validate_existing_record("Address", customer_existing_address)
 
@@ -376,7 +395,9 @@ def convert(
 	)
 
 	response = {"deal": deal_name, "customer": None, "customer_error": None, "duplicate_customer": None}
-	if setup_customer and is_erpnext_customer_enabled():
+	if existing_customer:
+		response.update(erpnext_customer.link_existing_customer(deal_name, existing_customer))
+	elif setup_customer and is_erpnext_customer_enabled():
 		response.update(
 			_run_customer_setup(
 				deal_name,

@@ -17,17 +17,17 @@ const newContact = (email = '') =>
 describe('email verification', () => {
 	it('blocks the step until the typed email is verified', () => {
 		const form = { contact: newContact('ada@example.com'), customer: {} }
-		expect(validateStep(1, form, {})).toHaveProperty('email')
+		expect(validateStep(2, form, {})).toHaveProperty('email')
 		form.contact.emailVerification.verifiedEmail = 'ADA@example.com'
-		expect(validateStep(1, form, {})).toEqual({})
+		expect(validateStep(2, form, {})).toEqual({})
 	})
 
 	it('does not require verification for an empty email or an existing contact', () => {
-		expect(validateStep(1, { contact: newContact(''), customer: {} }, {})).toEqual({})
+		expect(validateStep(2, { contact: newContact(''), customer: {} }, {})).toEqual({})
 		const existing = newContact('ada@example.com')
 		existing.mode = 'existing'
 		existing.existing = 'CONTACT-1'
-		expect(validateStep(1, { contact: existing, customer: {} }, {})).toEqual({})
+		expect(validateStep(2, { contact: existing, customer: {} }, {})).toEqual({})
 	})
 
 	it('sends a code, then verifies it', async () => {
