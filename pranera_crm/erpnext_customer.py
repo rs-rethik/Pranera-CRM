@@ -18,6 +18,7 @@ from frappe import _
 from frappe.rate_limiter import rate_limit
 
 from pranera_crm import customer_wizard as cw
+from pranera_crm.pincode import india_states
 from pranera_crm.utils import field_meta
 
 CUSTOMER = "Customer"
@@ -255,6 +256,8 @@ def get_context(organization: str | None) -> dict:
 		"organization_questions": cw.all_questions_payload("Organization", include_bridge_questions=enabled),
 		"contact_questions": cw.all_questions_payload("Contact", include_bridge_questions=enabled),
 		"address_fields": address_field_meta() if enabled else [],
+		# the address's State is picked from these (India Compliance's names), not typed
+		"india_states": india_states() if enabled else [],
 		"existing_customer": (
 			frappe.db.exists(CUSTOMER, {"customer_name": organization}) if organization and enabled else None
 		),
