@@ -9,7 +9,25 @@
 			}}
 		</p>
 
-		<Switch v-model="g.none" :label="__('No GSTIN (unregistered or individual)')" />
+		<!-- one choice answers both "GSTIN?" and "business or individual?" -->
+		<div class="grid gap-2" :class="kinds.length === 3 ? 'sm:grid-cols-3' : 'sm:grid-cols-2'">
+			<label
+				v-for="k in kinds"
+				:key="k.value"
+				class="flex cursor-pointer items-start gap-3 rounded border p-3"
+				:class="
+					kind === k.value
+						? 'border-outline-gray-5 bg-surface-gray-1'
+						: 'border-outline-gray-2'
+				"
+			>
+				<input v-model="kind" type="radio" class="mt-1" :value="k.value" />
+				<span>
+					<span class="block font-medium text-ink-gray-9">{{ k.label }}</span>
+					<span class="block text-sm text-ink-gray-5">{{ k.description }}</span>
+				</span>
+			</label>
+		</div>
 
 		<!-- no GSTIN: customers the lead may already be (by its mobile or company name) -->
 		<template v-if="g.none">
@@ -173,18 +191,65 @@
 
 <script setup>
 import { computed, inject, ref, toRef, watch } from 'vue'
-import { Button, ErrorMessage, FormControl, Switch } from 'frappe-ui'
+import { Button, ErrorMessage, FormControl } from 'frappe-ui'
 import { api, errorMessage } from '@/lib/api'
 import { GSTIN_FORMAT } from '@/lib/validation'
 import { __ } from '@/translation'
 
 const GST_GATE_KEY = 'gst_registered'
+const CUSTOMER_TYPE_KEY = 'customer_type'
 
 const w = inject('wizard')
 const { ctx, form } = w
 const errors = toRef(w, 'errors')
 const showErrors = toRef(w, 'showErrors')
 const g = form.gstin
+
+// the configured "business or individual?" question, answered here instead of on the next step
+const customerTypeQuestion = computed(() =>
+	(ctx.customer?.organization_questions || []).find((q) => q.question_key === CUSTOMER_TYPE_KEY)
+)
+const hasOption = (value) =>
+	(customerTypeQuestion.value?.options || []).some((o) => (o?.value ?? o) === value)
+
+const kinds = computed(() => [
+	{
+		value: 'gstin',
+		label: __('Has GSTIN'),
+		description: __('Name and address come from the GST portal'),
+	},
+	{
+		value: 'business',
+		label: __('Business, no GSTIN'),
+		description: __('Unregistered business: enter its address'),
+	},
+	...(hasOption('individual')
+		? [
+				{
+					value: 'individual',
+					label: __('Individual'),
+					description: __('A person, not a business'),
+				},
+		  ]
+		: []),
+])
+
+const kind = computed({
+	get: () => (!g.none ? 'gstin' : g.individual ? 'individual' : 'business'),
+	set: (value) => {
+		g.individual = value === 'individual'
+		g.none = value !== 'gstin'
+		answerCustomerType()
+	},
+})
+
+/** Whatever the choice above says, so the Organization step doesn't ask it again. */
+function answerCustomerType() {
+	if (!customerTypeQuestion.value) return
+	const value = g.individual ? 'individual' : 'company'
+	if (hasOption(value)) form.customer.answers[CUSTOMER_TYPE_KEY] = value
+}
+answerCustomerType()
 
 const normalized = (value) => (value || '').trim().toUpperCase()
 const canCheck = computed(() => GSTIN_FORMAT.test(normalized(g.value)))

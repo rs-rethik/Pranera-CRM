@@ -18,6 +18,8 @@ export function createForm(ctx) {
 		gstin: {
 			value: '',
 			none: false,
+			// no GSTIN, and a person rather than a business
+			individual: false,
 			checked: '',
 			existing: [],
 			customer: '',
@@ -72,6 +74,7 @@ export function applyDraft(form, draft) {
 		const g = saved.gstin
 		if (typeof g.value === 'string') form.gstin.value = g.value
 		form.gstin.none = !!g.none
+		form.gstin.individual = !!g.none && !!g.individual
 		form.gstin.newCustomer = !!g.newCustomer
 		if (typeof g.checked === 'string') form.gstin.checked = g.checked
 		if (Array.isArray(g.existing)) form.gstin.existing = g.existing

@@ -66,7 +66,9 @@ export function validateStep(index, form, ctx) {
 		} else {
 			const value = (g.value || '').trim().toUpperCase()
 			if (!GSTIN_FORMAT.test(value)) {
-				errors.gstin = __('Enter a valid 15-character GSTIN, or choose "No GSTIN"')
+				errors.gstin = __(
+					'Enter a valid 15-character GSTIN, or choose "Business, no GSTIN" or "Individual"'
+				)
 			} else if (g.checked !== value) {
 				errors.gstin = __('Check the GSTIN to continue')
 			} else if (g.existing.length && !g.customer) {
