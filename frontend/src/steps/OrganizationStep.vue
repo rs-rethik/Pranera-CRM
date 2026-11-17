@@ -44,7 +44,8 @@
 		</template>
 
 		<template v-if="!useExisting">
-			<template v-if="customerTypeGateActive">
+			<!-- answered on the GSTIN step; asked here only if that couldn't answer it -->
+			<template v-if="customerTypeGateActive && customerTypeAnswer == null">
 				<QuestionField
 					v-model="customer.answers[customerTypeGateQuestion.question_key]"
 					:question="customerTypeGateQuestion"
@@ -58,33 +59,13 @@
 				v-if="customerTypeUnlocked && gstGateActive && !ctx.customer.existing_customer"
 			>
 				<QuestionField
+					v-if="gstAnswer == null"
 					v-model="customer.answers[gstGateQuestion.question_key]"
 					:question="gstGateQuestion"
 					:error="showErrors ? errors['cq_' + gstGateQuestion.question_key] : ''"
 				/>
 
 				<template v-if="gstAnswer === 'yes'">
-					<div class="flex items-end gap-2">
-						<FieldControl
-							v-model="customer.address.values.gstin"
-							:field="{
-								...gstinField,
-								description: __('Fetches the registered name and address.'),
-							}"
-							class="flex-1"
-							:error="showErrors ? errors.customer_gstin : ''"
-						/>
-						<Button
-							variant="subtle"
-							:loading="fetchingGstin"
-							:disabled="!canFetchGstin"
-							@click="fetchFromGstin"
-						>
-							{{ __('Fetch') }}
-						</Button>
-					</div>
-					<ErrorMessage v-if="gstinLookupError" :message="gstinLookupError" />
-
 					<div v-if="gstChildQuestions.length" class="grid grid-cols-2 gap-x-4 gap-y-4">
 						<QuestionField
 							v-for="q in gstChildQuestions"
@@ -204,32 +185,8 @@
 								:error="showErrors ? errors.customer_existing_address : ''"
 							/>
 
-							<template v-else>
-								<div
-									v-if="gstinField && !gstGateActive"
-									class="flex items-end gap-2"
-								>
-									<FieldControl
-										v-model="customer.address.values.gstin"
-										:field="{
-											...gstinField,
-											description: __(
-												'Required unless GST Category is Unregistered or Overseas.'
-											),
-										}"
-										class="flex-1"
-										:error="showErrors ? errors.customer_gstin : ''"
-									/>
-									<Button
-										variant="subtle"
-										:loading="fetchingGstin"
-										:disabled="!canFetchGstin"
-										@click="fetchFromGstin"
-									>
-										{{ __('Fetch') }}
-									</Button>
-								</div>
-
+							<!-- from the GST portal: shown as it is -->
+							<template v-else-if="addressLocked">
 								<div class="grid grid-cols-2 gap-x-4 gap-y-4">
 									<FieldControl
 										v-for="field in otherAddressFields"
@@ -249,7 +206,71 @@
 										"
 									/>
 								</div>
-								<p v-if="!addressLocked" class="text-sm text-ink-gray-5">
+							</template>
+
+							<!-- typed: the pincode fills the state and suggests the city -->
+							<template v-else>
+								<div class="grid grid-cols-2 gap-x-4 gap-y-4">
+									<FormControl
+										v-model="address.pincode"
+										type="text"
+										inputmode="numeric"
+										maxlength="6"
+										autocomplete="postal-code"
+										:label="__('Pincode')"
+										placeholder="641604"
+										:required="addressRequired"
+										:description="pincodeNote"
+										:error="
+											pincodeError ||
+											(showErrors ? errors.customer_pincode : '')
+										"
+									/>
+									<Combobox
+										v-model="cityModel"
+										:options="cityOptions"
+										:label="__('City')"
+										:placeholder="__('Pick or type the city')"
+										:required="addressRequired"
+										open-on-focus
+										:error="showErrors ? errors.customer_city : ''"
+									/>
+									<Combobox
+										v-model="stateModel"
+										:options="stateOptions"
+										:label="__('State')"
+										:placeholder="__('Pick the state')"
+										:required="addressRequired && address.country === 'India'"
+										open-on-focus
+										:error="showErrors ? errors.customer_state : ''"
+									/>
+									<Link
+										v-model="address.country"
+										doctype="Country"
+										:label="__('Country')"
+										:required="addressRequired"
+										:error="showErrors ? errors.customer_country : ''"
+									/>
+									<FormControl
+										v-model="address.address_line1"
+										type="text"
+										class="col-span-2"
+										autocomplete="address-line1"
+										:label="__('Address Line 1')"
+										:placeholder="__('Door no., street')"
+										:required="addressRequired"
+										:error="showErrors ? errors.customer_address_line1 : ''"
+									/>
+									<FormControl
+										v-model="address.address_line2"
+										type="text"
+										class="col-span-2"
+										autocomplete="address-line2"
+										:label="__('Address Line 2')"
+										:placeholder="__('Area, landmark (optional)')"
+									/>
+								</div>
+								<p class="text-sm text-ink-gray-5">
 									{{
 										addressRequired
 											? __(
@@ -269,7 +290,7 @@
 
 <script setup>
 import { computed, inject, ref, toRef, watch } from 'vue'
-import { Button, ErrorMessage, Switch } from 'frappe-ui'
+import { Combobox, FormControl, Switch } from 'frappe-ui'
 import { Link } from 'frappe-ui/frappe'
 import CandidateList from '@/components/CandidateList.vue'
 import FieldControl from '@/components/FieldControl.vue'
@@ -384,8 +405,18 @@ const orgDetailsUnlocked = computed(
 	() => customerTypeUnlocked.value && (!gstGateActive.value || gstAnswer.value != null)
 )
 
-const orgNameLocked = computed(() => gstGateActive.value && gstAnswer.value === 'yes')
-const addressLocked = computed(() => gstGateActive.value && gstAnswer.value === 'yes')
+// a GSTIN checked on the first step: the GST portal's name and address are used as they are
+const fromGstPortal = computed(() => !form.gstin.none && !!form.gstin.registered)
+const orgNameLocked = computed(
+	() =>
+		(gstGateActive.value && gstAnswer.value === 'yes') ||
+		(fromGstPortal.value && !!org.values.organization)
+)
+const addressLocked = computed(
+	() =>
+		(gstGateActive.value && gstAnswer.value === 'yes') ||
+		(fromGstPortal.value && !!customer.address.values.address_line1)
+)
 
 const GATE_KEYS = new Set([INDIVIDUAL_GATE_KEY, GST_GATE_KEY])
 
@@ -406,40 +437,92 @@ const remainingOrganizationQuestions = computed(() =>
 	)
 )
 
-const gstinField = computed(() =>
-	ctx.customer?.address_fields?.find((f) => f.fieldname === 'gstin')
-)
 const otherAddressFields = computed(() =>
 	(ctx.customer?.address_fields || []).filter((f) => f.fieldname !== 'gstin')
 )
-const canFetchGstin = computed(() => (customer.address.values.gstin || '').trim().length === 15)
 
-const fetchingGstin = ref(false)
-const gstinLookupError = ref('')
+// ---- typed address: the pincode fills the state and suggests the city ----
+const address = customer.address.values
+if (!address.country) address.country = 'India'
 
-async function fetchFromGstin() {
-	if (fetchingGstin.value || !canFetchGstin.value) return
-	fetchingGstin.value = true
-	gstinLookupError.value = ''
-	try {
-		const info = await api('pranera_crm.erpnext_customer.lookup_gstin', {
-			gstin: customer.address.values.gstin.trim(),
-		})
-		if (
-			info.business_name &&
-			org.mode === 'new' &&
-			!org.values.organization &&
-			!isIndividual.value
-		) {
-			org.values.organization = info.business_name
+const pincodeInfo = ref(null)
+const pincodeError = ref('')
+const lookingUp = ref(false)
+const PINCODE = /^[1-9][0-9]{5}$/
+
+watch(
+	() => (address.pincode || '').trim(),
+	async (pincode) => {
+		pincodeError.value = ''
+		if (!PINCODE.test(pincode)) {
+			pincodeInfo.value = null
+			return
 		}
-		for (const [field, value] of Object.entries(info.address || {})) {
-			if (value && !customer.address.values[field]) customer.address.values[field] = value
+		if (address.country && address.country !== 'India') return
+		lookingUp.value = true
+		try {
+			const info = await api('pranera_crm.pincode.pincode_details', { pincode })
+			if ((address.pincode || '').trim() !== pincode) return // typed on meanwhile
+			pincodeInfo.value = info
+			if (info.state) address.state = info.state
+			else if (info.states?.length && !info.states.includes(address.state))
+				address.state = ''
+			const known = info.cities.map((c) => c.toLowerCase())
+			if (info.cities.length && !known.includes((address.city || '').toLowerCase()))
+				address.city = info.cities[0]
+		} catch (err) {
+			pincodeError.value = errorMessage(err)
+		} finally {
+			lookingUp.value = false
 		}
-	} catch (err) {
-		gstinLookupError.value = errorMessage(err)
-	} finally {
-		fetchingGstin.value = false
-	}
-}
+	},
+	{ immediate: true }
+)
+
+const pincodeNote = computed(() => {
+	if (lookingUp.value) return __('Looking up the pincode...')
+	const info = pincodeInfo.value
+	if (!info) return __('Enter the 6-digit pincode: the state and city are filled in.')
+	if (!info.cities.length) return __('Pincode not found: pick the state and type the city.')
+	return info.cities.length > 1
+		? __('City filled in; {0} more to pick from.', [info.cities.length - 1])
+		: __('City and state filled in.')
+})
+
+const asOptions = (names) => names.map((name) => ({ label: name, value: name }))
+const cityOptions = computed(() => [
+	...asOptions(pincodeInfo.value?.cities || []),
+	{
+		type: 'custom',
+		key: 'typed-city',
+		label: __('Use the typed name'),
+		keepOpen: false,
+		condition: ({ query }) => {
+			const q = (query || '').trim().toLowerCase()
+			return !!q && !(pincodeInfo.value?.cities || []).some((c) => c.toLowerCase() === q)
+		},
+		onClick: ({ query }) => {
+			address.city = (query || '').trim()
+		},
+	},
+])
+const cityModel = computed({
+	get: () => address.city || null,
+	set: (value) => {
+		address.city = value || ''
+	},
+})
+
+// the pincode's states first (Chandigarh's pincodes are Punjab's too), then every other state
+const stateOptions = computed(() => {
+	const first = pincodeInfo.value?.states || []
+	const rest = (ctx.customer?.india_states || []).filter((s) => !first.includes(s))
+	return asOptions([...first, ...rest])
+})
+const stateModel = computed({
+	get: () => address.state || null,
+	set: (value) => {
+		address.state = value || ''
+	},
+})
 </script>
