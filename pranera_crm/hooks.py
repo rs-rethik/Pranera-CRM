@@ -5,7 +5,22 @@ app_description = "A step-by-step deal conversion wizard for Frappe CRM"
 app_email = "rethik@aerele.in"
 app_license = "mit"
 
-website_route_rules = [{"from_route": "/crm-open/<name>", "to_route": "crm_open"}]
+required_apps = ["crm", "erpnext"]
+
+website_route_rules = [
+	# the Convert to Deal wizard (a single page app) and its offline service worker
+	{"from_route": "/deal_wizard/sw.js", "to_route": "deal_wizard_sw"},
+	{"from_route": "/deal_wizard/<path:app_path>", "to_route": "deal_wizard"},
+	{"from_route": "/crm-open/<name>", "to_route": "crm_open"},
+]
+
+page_renderer = ["pranera_crm.sw.ServiceWorkerRenderer"]
+
+fixtures = [
+	# CRM's Convert to Deal button opens the wizard; and its on/off switch in CRM Settings
+	{"dt": "CRM Form Script", "filters": [["name", "=", "Pranera Convert Wizard"]]},
+	{"dt": "Custom Field", "filters": [["name", "=", "FCRM Settings-enable_convert_to_deal_wizard"]]},
+]
 
 standard_queries = {"CRM Lost Reason": "pranera_crm.lost_reasons.search"}
 
@@ -19,16 +34,11 @@ doc_events = {
 	"CRM Deal": {"validate": "pranera_crm.lost_reasons.validate"},
 }
 
-after_install = [
-	"pranera_crm.lost_reasons.ensure_fields",
-	"pranera_crm.owner_follow_up.ensure_fields",
-	"pranera_crm.conversion_report.ensure_defaults",
-]
-after_migrate = [
-	"pranera_crm.lost_reasons.ensure_fields",
-	"pranera_crm.owner_follow_up.ensure_fields",
-	"pranera_crm.conversion_report.ensure_defaults",
-]
+# setup.py runs the steps that were here (lost reasons, owner follow-up, conversion report) and the
+# wizard's own: its questions, the payment terms and territories they name, and its switch
+before_migrate = "pranera_crm.setup.before_migrate"
+after_install = "pranera_crm.setup.after_install"
+after_migrate = "pranera_crm.setup.after_migrate"
 
 scheduler_events = {
 	"cron": {

@@ -1,0 +1,14 @@
+[
+ {
+  "doctype": "Custom Field",
+  "name": "FCRM Settings-enable_convert_to_deal_wizard",
+  "dt": "FCRM Settings",
+  "module": "Pranera CRM",
+  "fieldname": "enable_convert_to_deal_wizard",
+  "label": "Enable Convert to Deal Wizard",
+  "fieldtype": "Check",
+  "default": "1",
+  "insert_after": "enable_sales_hierarchy",
+  "description": "When enabled, Convert to Deal on a lead opens the step-by-step wizard (Pranera CRM). When disabled, CRM's standard Convert to Deal dialog is used."
+ }
+]

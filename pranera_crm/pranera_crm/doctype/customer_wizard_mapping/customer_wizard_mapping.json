@@ -1,0 +1,289 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-09-22 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "question_key",
+  "label",
+  "scope",
+  "enabled",
+  "is_mandatory",
+  "requires_erpnext_bridge",
+  "column_break_basic",
+  "target_doctype",
+  "target_fieldname",
+  "question_type",
+  "section_break_secondary_target",
+  "secondary_target_doctype",
+  "secondary_target_fieldname",
+  "section_break_options",
+  "options",
+  "section_break_dynamic",
+  "source_doctype",
+  "source_label_field",
+  "column_break_dynamic",
+  "source_filters",
+  "section_break_branching",
+  "depends_on_question",
+  "depends_on_option",
+  "depends_on_operator",
+  "column_break_branching",
+  "fallback_value",
+  "sequence",
+  "section_break_override",
+  "override_roles"
+ ],
+ "fields": [
+  {
+   "description": "Short unique code, e.g. gst_registered. Not shown to users.",
+   "fieldname": "question_key",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Question Key",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "description": "The question the sales user sees, e.g. \"Does the customer have a GST number?\"",
+   "fieldname": "label",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Question",
+   "reqd": 1
+  },
+  {
+   "description": "Where the question appears: the Organization step or the Contact step.",
+   "fieldname": "scope",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Applies To",
+   "options": "Organization\nContact",
+   "reqd": 1
+  },
+  {
+   "default": "0",
+   "description": "The user must answer this before continuing.",
+   "fieldname": "is_mandatory",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Mandatory"
+  },
+  {
+   "default": "1",
+   "description": "Tick for answers saved on the ERPNext Customer, Address or Contact. Untick to always ask, e.g. Territory or Industry.",
+   "fieldname": "requires_erpnext_bridge",
+   "fieldtype": "Check",
+   "label": "Ask Only If ERPNext Is Enabled"
+  },
+  {
+   "default": "1",
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Enabled",
+   "description": "Untick to stop asking this question."
+  },
+  {
+   "fieldname": "column_break_basic",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Where the answer is saved.",
+   "fieldname": "target_doctype",
+   "fieldtype": "Link",
+   "label": "Target Doctype",
+   "options": "DocType",
+   "reqd": 1
+  },
+  {
+   "description": "The field that gets the answer, e.g. gst_category. For a Sales Person question, use sales_team on Customer.",
+   "fieldname": "target_fieldname",
+   "fieldtype": "Autocomplete",
+   "label": "Target Fieldname",
+   "reqd": 1
+  },
+  {
+   "default": "Fixed",
+   "description": "Fixed: you list the answers below. Dynamic: the answers come from records in another doctype, e.g. Sales Persons.",
+   "fieldname": "question_type",
+   "fieldtype": "Select",
+   "label": "Question Type",
+   "options": "Fixed\nDynamic",
+   "reqd": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "section_break_secondary_target",
+   "fieldtype": "Section Break",
+   "label": "Secondary Target (optional)"
+  },
+  {
+   "description": "Optional. Save the same answer on a second field too. Each answer then needs a Secondary Assigned Value.",
+   "fieldname": "secondary_target_doctype",
+   "fieldtype": "Link",
+   "label": "Secondary Target Doctype",
+   "options": "DocType"
+  },
+  {
+   "depends_on": "eval:doc.secondary_target_doctype",
+   "description": "The field on that doctype.",
+   "fieldname": "secondary_target_fieldname",
+   "fieldtype": "Autocomplete",
+   "label": "Secondary Target Fieldname"
+  },
+  {
+   "collapsible": 1,
+   "depends_on": "eval:doc.question_type == \"Fixed\"",
+   "fieldname": "section_break_options",
+   "fieldtype": "Section Break",
+   "label": "Answers"
+  },
+  {
+   "depends_on": "eval:doc.question_type == \"Fixed\"",
+   "fieldname": "options",
+   "fieldtype": "Table",
+   "label": "Answers",
+   "options": "Customer Wizard Mapping Option"
+  },
+  {
+   "collapsible": 1,
+   "depends_on": "eval:doc.question_type == \"Dynamic\"",
+   "fieldname": "section_break_dynamic",
+   "fieldtype": "Section Break",
+   "label": "Live Answer Source"
+  },
+  {
+   "depends_on": "eval:doc.question_type == \"Dynamic\"",
+   "description": "Where the answers come from, e.g. Sales Person.",
+   "fieldname": "source_doctype",
+   "fieldtype": "Link",
+   "label": "Source Doctype",
+   "options": "DocType"
+  },
+  {
+   "default": "name",
+   "depends_on": "eval:doc.question_type == \"Dynamic\"",
+   "description": "The field shown as the answer text, e.g. sales_person_name. Leave empty to show the record name.",
+   "fieldname": "source_label_field",
+   "fieldtype": "Data",
+   "label": "Source Label Field"
+  },
+  {
+   "fieldname": "column_break_dynamic",
+   "fieldtype": "Column Break"
+  },
+  {
+   "depends_on": "eval:doc.question_type == \"Dynamic\"",
+   "description": "Optional filter as JSON, e.g. {\"enabled\": 1}. Use {{ answers.question_key }} to filter by an earlier answer.",
+   "fieldname": "source_filters",
+   "fieldtype": "Code",
+   "label": "Filters (JSON)",
+   "options": "JSON"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "section_break_branching",
+   "fieldtype": "Section Break",
+   "label": "Branching & Fallback"
+  },
+  {
+   "description": "Show this question only after another question is answered a certain way.",
+   "fieldname": "depends_on_question",
+   "fieldtype": "Link",
+   "label": "Only After Question",
+   "options": "Customer Wizard Mapping"
+  },
+  {
+   "depends_on": "eval:doc.depends_on_question",
+   "description": "The Answer Key that must be chosen in that question.",
+   "fieldname": "depends_on_option",
+   "fieldtype": "Data",
+   "label": "Only When Answer Is"
+  },
+  {
+   "default": "Is",
+   "depends_on": "eval:doc.depends_on_question",
+   "description": "Is: show for that answer. Is not: show for every other answer.",
+   "fieldname": "depends_on_operator",
+   "fieldtype": "Select",
+   "label": "Match",
+   "options": "Is\nIs not"
+  },
+  {
+   "fieldname": "column_break_branching",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Value used when the user leaves this question unanswered.",
+   "fieldname": "fallback_value",
+   "fieldtype": "Data",
+   "label": "Fallback Value"
+  },
+  {
+   "default": "0",
+   "description": "Question order; lower comes first. If two questions fill the same field, the later answer wins.",
+   "fieldname": "sequence",
+   "fieldtype": "Int",
+   "label": "Order"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "section_break_override",
+   "fieldtype": "Section Break",
+   "label": "Review Step Override"
+  },
+  {
+   "description": "Roles that can change the value on the Review step. Leave empty to allow nobody.",
+   "fieldname": "override_roles",
+   "fieldtype": "Table MultiSelect",
+   "label": "Override Allowed For Roles",
+   "options": "Customer Wizard Mapping Role"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-09-25 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Pranera CRM",
+ "name": "Customer Wizard Mapping",
+ "naming_rule": "By fieldname",
+ "autoname": "field:question_key",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Sales Manager"
+  },
+  {
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Sales User"
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "sequence",
+ "sort_order": "ASC",
+ "states": [],
+ "track_changes": 1
+}

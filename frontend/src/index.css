@@ -1,0 +1,12 @@
+@import 'frappe-ui/style.css';
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  /* no rubber-band scrolling in the installed (standalone) app */
+  overscroll-behavior-y: none;
+  -webkit-tap-highlight-color: transparent;
+}
