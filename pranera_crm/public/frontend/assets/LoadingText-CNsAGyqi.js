@@ -1,0 +1,1 @@
+import{at as e,bt as t,it as n,nn as r,nt as i,ot as a}from"./warnDeprecated-BFnICih0.js";import{b as o}from"./purify.es-C0hnOlYm.js";var s={class:`flex items-center text-base text-ink-gray-4`},c=a({__name:`LoadingText`,props:{text:{default:`Loading...`}},setup(a){return(c,l)=>(t(),i(`div`,s,[e(o,{class:`-ml-1 mr-2 h-3 w-3`}),n(` `+r(a.text),1)]))}});export{c as t};

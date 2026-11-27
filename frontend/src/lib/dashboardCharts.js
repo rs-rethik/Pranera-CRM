@@ -1,7 +1,6 @@
 import { formatNumber } from './format'
 import { __ } from '@/translation'
 import { compactAmount, formatKgs, fullAmount, periodLabel, personLabel } from './dashboard'
-import { escapeHTML } from './reports'
 
 // status colours carry meaning here: open is neutral blue, won green, lost red
 // one blue for quantities in the pipeline, green for what went out; grey for comparisons
@@ -52,7 +51,7 @@ const valueAxis = (colors, format) => ({
 const kgAxis = (colors, values) => {
 	const tonnes = Math.max(0, ...values) >= 10000
 	return valueAxis(colors, (value) =>
-		tonnes ? `${formatNumber(value / 1000, { precision: 0 })} t` : formatKgs(value)
+		tonnes ? `${formatNumber(value / 1000, { precision: 0 })} t` : formatKgs(value),
 	)
 }
 
@@ -64,6 +63,9 @@ const categoryAxis = (colors, labels, extra = {}) => ({
 	axisLabel: { color: colors.text, fontSize: 12, ...extra },
 })
 
+const HTML_ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }
+const escapeHTML = (text) => String(text ?? '').replace(/[&<>"']/g, (char) => HTML_ESCAPES[char])
+
 // ECharts puts a tooltip into the page as HTML, and stage, territory, source and reason
 // names are typed by users: every piece of text is escaped here, in one place
 function tooltipRows(title, rows) {
@@ -71,8 +73,8 @@ function tooltipRows(title, rows) {
 		.map(
 			([marker, label, value]) =>
 				`<div style="display:flex;gap:16px;justify-content:space-between"><span>${marker}${escapeHTML(
-					label
-				)}</span><b>${escapeHTML(value)}</b></div>`
+					label,
+				)}</span><b>${escapeHTML(value)}</b></div>`,
 		)
 		.join('')
 	return `<div style="font-weight:600;margin-bottom:4px">${escapeHTML(title)}</div>${lines}`
@@ -127,7 +129,7 @@ export function kgBarsOptions(rows, labelOf, { color = COLORS.open } = {}) {
 								rows[dataIndex].deals
 							}`,
 					},
-				}
+				},
 			),
 		],
 	}
@@ -156,13 +158,13 @@ export function deliveredTrendOptions(delivered) {
 		xAxis: categoryAxis(colors, labels),
 		yAxis: kgAxis(
 			colors,
-			delivered.trend.map((row) => row.kgs)
+			delivered.trend.map((row) => row.kgs),
 		),
 		series: [
 			bar(
 				__('Delivered'),
 				delivered.trend.map((row) => row.kgs),
-				COLORS.delivered
+				COLORS.delivered,
 			),
 		],
 	}
@@ -193,11 +195,11 @@ export function comparisonOptions(comparison) {
 		},
 		xAxis: categoryAxis(
 			colors,
-			periods.map(([, label]) => label)
+			periods.map(([, label]) => label),
 		),
 		yAxis: kgAxis(
 			colors,
-			periods.map(([key]) => comparison[key].kgs)
+			periods.map(([key]) => comparison[key].kgs),
 		),
 		series: [
 			{
@@ -207,7 +209,7 @@ export function comparisonOptions(comparison) {
 						value: comparison[key].kgs,
 						itemStyle: { color, borderRadius: 3 },
 					})),
-					COLORS.delivered
+					COLORS.delivered,
 				),
 				barMaxWidth: 56,
 				cursor: 'default',
@@ -239,7 +241,7 @@ export function orderTrendOptions(orders) {
 			bar(
 				__('Value'),
 				orders.trend.map((row) => row.value),
-				COLORS.value
+				COLORS.value,
 			),
 		],
 	}
