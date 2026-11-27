@@ -17,7 +17,27 @@ page_renderer = ["pranera_crm.sw.ServiceWorkerRenderer"]
 
 fixtures = [
 	{"dt": "CRM Form Script", "filters": [["name", "=", "Pranera Convert Wizard"]]},
-	{"dt": "Custom Field", "filters": [["name", "=", "FCRM Settings-enable_convert_to_deal_wizard"]]},
+	{
+		"dt": "Custom Field",
+		"filters": [
+			[
+				"name",
+				"in",
+				[
+					"FCRM Settings-enable_convert_to_deal_wizard",
+					# Pranera's own fields, made on the client site first; the Deal Dashboard reads them.
+					# No module on purpose: uninstalling this app must not drop their data.
+					"CRM Products-custom_uom",
+					"CRM Products-custom_item_code",
+					"CRM Organization-custom_customer",
+					"CRM Organization-custom_sales_person",
+					"CRM Deal-custom_customer",
+					"CRM Deal-custom_sales_person",
+					"Sales Order-custom_crm_deal",
+				],
+			]
+		],
+	},
 	{"dt": "Report", "filters": [["name", "=", "Deals by Status"]]},
 ]
 
@@ -30,7 +50,22 @@ doc_events = {
 		"after_insert": "pranera_crm.lead_contact.on_lead_change",
 		"on_update": "pranera_crm.lead_contact.on_lead_change",
 	},
-	"CRM Deal": {"validate": "pranera_crm.lost_reasons.validate"},
+	"CRM Deal": {
+		"validate": "pranera_crm.lost_reasons.validate",
+		# cached Deal Dashboards go stale with any deal change (one cache write, after commit)
+		"on_update": "pranera_crm.deal_dashboard.api.bump_cache_version",
+		"on_trash": "pranera_crm.deal_dashboard.api.bump_cache_version",
+	},
+	"CRM Organization": {"on_update": "pranera_crm.deal_dashboard.api.bump_cache_version"},
+	"Customer": {"on_update": "pranera_crm.deal_dashboard.api.bump_cache_version"},
+	"Sales Order": {
+		"on_submit": "pranera_crm.deal_dashboard.api.bump_cache_version",
+		"on_cancel": "pranera_crm.deal_dashboard.api.bump_cache_version",
+		"on_update_after_submit": "pranera_crm.deal_dashboard.api.bump_cache_version",
+	},
+	# a user's Sales Person comes from Sales Person -> Employee -> User
+	"Sales Person": {"on_update": "pranera_crm.deal_dashboard.scope.clear_cache"},
+	"Employee": {"on_update": "pranera_crm.deal_dashboard.scope.clear_cache"},
 }
 
 scheduler_events = {

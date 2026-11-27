@@ -22,9 +22,10 @@ def get_context(context):
 	if not check_app_permission():
 		frappe.throw(_("You do not have permission to access Frappe CRM"), frappe.PermissionError)
 
-	if not is_wizard_enabled() and not is_reports_request():
+	if not is_wizard_enabled() and not is_panel_request():
 		# "Enable Convert to Deal Wizard" is off in CRM Settings: use CRM's own flow.
-		# Reports share this SPA but aren't part of the wizard, so they stay reachable.
+		# Reports and the Deal Dashboard share this SPA but aren't part of the wizard,
+		# so they stay reachable.
 		redirect_to(crm_url_for_request())
 
 	context.boot = get_boot()
@@ -40,10 +41,14 @@ def crm_url_for_request() -> str:
 	return "/crm"
 
 
-def is_reports_request() -> bool:
-	"""/deal_wizard/reports[/<report>] (embedded in the CRM sidebar by crm_sidebar_ext.js)."""
+PANEL_PAGES = ("reports", "dashboard")
+
+
+def is_panel_request() -> bool:
+	"""/deal_wizard/reports[/<report>] and /deal_wizard/dashboard, which
+	crm_sidebar_ext.js shows inside CRM."""
 	parts = [p for p in frappe.local.request.path.split("/") if p]
-	return parts[:2] == ["deal_wizard", "reports"]
+	return len(parts) >= 2 and parts[0] == "deal_wizard" and parts[1] in PANEL_PAGES
 
 
 def redirect_to(location: str):
