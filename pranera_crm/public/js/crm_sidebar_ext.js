@@ -1,7 +1,8 @@
 /**
- * Adds a "Reports" section to Frappe CRM's sidebar: one item per report the user
- * pinned, and the section label opens the page where reports are added / removed.
- * A report opens in a panel over CRM's content area, so the CRM sidebar stays in place.
+ * Adds a "Deal Dashboard" item and a "Reports" section to Frappe CRM's sidebar: one
+ * item per report the user pinned, and the section label opens the page where reports
+ * are added / removed. Each opens in a panel over CRM's content area, so the CRM
+ * sidebar stays in place.
  *
  * Loaded on every /crm page by pranera_crm/www/crm.html, which overrides CRM's
  * page without changing it. The crm app itself is never modified, so this file
@@ -13,6 +14,8 @@
 	const REPORTS_URL = "/deal_wizard/reports";
 	const PINS_API = "/api/method/pranera_crm.report.get_pinned_reports";
 	const HUB_KEY = "reports";
+	const DASHBOARD_URL = "/deal_wizard/dashboard";
+	const DASHBOARD_KEY = "dashboard";
 
 	const MARKUP = {
 		sidebar: '[data-slot="sidebar"]',
@@ -35,30 +38,39 @@
 	const ICON_ATTRS =
 		'xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="size-4 text-ink-gray-7" aria-hidden="true"';
 	const FILE_ICON = `<svg ${ICON_ATTRS}><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>`;
+	const CHART_ICON = `<svg ${ICON_ATTRS}><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>`;
 
 	const MOBILE_WIDTH = 640;
 	const OPEN_CLASS = "pranera-panel-open";
 	const t = (text) => window.translated_messages?.[text] || text;
 	const SECTION_LABEL = t("Reports");
+	const DASHBOARD_LABEL = t("Deal Dashboard");
 
 	let pins = [];
 	let panel = null;
 	let frame = null;
 	let panelSidebar = null;
 	let activeKey = null; // null = panel closed
+	let panelQuery = ""; // the dashboard's filters, as a query string
 	const sidebarResize = new ResizeObserver(() => positionPanel());
 	// collapsing animates the sidebar's width after its classes change, so the section
 	// is rebuilt once the width settles
 	const widthWatch = new ResizeObserver(() => ensureSection());
 
-	// The open panel is kept in CRM's URL (?pranera_panel=reports | report:<name>) so a
-	// refresh, or a copied link, comes back to it. CRM's router ignores the extra param.
+	// The open panel is kept in CRM's URL (?pranera_panel=reports | report:<name> |
+	// dashboard) so a refresh, or a copied link, comes back to it. The dashboard's filters
+	// ride along in ?pranera_q. CRM's router ignores the extra params.
 	const PANEL_PARAM = "pranera_panel";
+	const QUERY_PARAM = "pranera_q";
 	const rawReplaceState = history.replaceState.bind(history);
 
 	function panelFromUrl() {
-		const value = new URLSearchParams(location.search).get(PANEL_PARAM);
+		const params = new URLSearchParams(location.search);
+		const value = params.get(PANEL_PARAM);
 		if (value === HUB_KEY) return { key: HUB_KEY, url: REPORTS_URL };
+		if (value === DASHBOARD_KEY) {
+			return { key: DASHBOARD_KEY, url: DASHBOARD_URL, query: params.get(QUERY_PARAM) };
+		}
 		if (value?.startsWith("report:") && value.length > 7) {
 			return { key: value, url: reportUrl(value.slice(7)) };
 		}
@@ -68,6 +80,7 @@
 	function stripPanel(url) {
 		const parsed = new URL(url, location.origin);
 		parsed.searchParams.delete(PANEL_PARAM);
+		parsed.searchParams.delete(QUERY_PARAM);
 		return parsed.pathname + parsed.search;
 	}
 
@@ -75,6 +88,8 @@
 		const params = new URLSearchParams(location.search);
 		if (key === null) params.delete(PANEL_PARAM);
 		else params.set(PANEL_PARAM, key);
+		if (key === DASHBOARD_KEY && panelQuery) params.set(QUERY_PARAM, panelQuery);
+		else params.delete(QUERY_PARAM);
 		const search = params.toString();
 		return location.pathname + (search ? `?${search}` : "") + location.hash;
 	}
@@ -145,8 +160,9 @@
 		if (!pendingPanel) return;
 		const sidebar = document.querySelector(MARKUP.sidebar);
 		if (!sidebar && !isMobile()) return;
-		const { key, url } = pendingPanel;
+		const { key, url, query } = pendingPanel;
 		pendingPanel = null;
+		panelQuery = cleanQuery(query);
 		showPanel(key, url, isMobile() ? null : sidebar);
 	}
 
@@ -165,6 +181,20 @@
 		section.dataset.signature = signature;
 
 		const collapsed = isCollapsed(sidebar);
+		const dashboard = document.createElement("nav");
+		dashboard.className = "mt-1 flex flex-col gap-1";
+		dashboard.append(
+			buildItem(
+				refItem,
+				signature,
+				DASHBOARD_KEY,
+				DASHBOARD_LABEL,
+				DASHBOARD_URL,
+				CHART_ICON
+			)
+		);
+		section.append(dashboard);
+
 		if (collapsed) {
 			// no room for a label: a divider keeps the group apart
 			const divider = document.createElement("div");
@@ -218,7 +248,7 @@
 		return label;
 	}
 
-	function buildItem(refItem, signature, key, text, url) {
+	function buildItem(refItem, signature, key, text, url, iconSvg = FILE_ICON) {
 		const item = refItem.cloneNode(true);
 		item.removeAttribute("id");
 		item.dataset.pranera = "item";
@@ -233,7 +263,7 @@
 		link.style.cursor = "pointer";
 
 		const icon = link.querySelector(MARKUP.iconSlot);
-		if (icon) icon.innerHTML = FILE_ICON;
+		if (icon) icon.innerHTML = iconSvg;
 		const label = link.lastElementChild?.querySelector(MARKUP.labelText);
 		if (label) label.textContent = text;
 		item.querySelector(MARKUP.suffix)?.replaceChildren();
@@ -284,8 +314,12 @@
 
 	function showPanel(key, url, sidebar) {
 		if (!panel) panel = buildPanel();
-		const src = `${url}?embed=1`;
-		if (frame.getAttribute("src") !== src) frame.src = src;
+		if (key !== DASHBOARD_KEY) panelQuery = "";
+		const src = `${url}?embed=1${panelQuery ? `&${panelQuery}` : ""}`;
+		// the dashboard changes its own filters: opening it again must not reload them away
+		const sameDashboard = key === DASHBOARD_KEY && activeKey === DASHBOARD_KEY;
+		if (!sameDashboard && frame.getAttribute("src") !== src) frame.src = src;
+		frame.title = key === DASHBOARD_KEY ? DASHBOARD_LABEL : SECTION_LABEL;
 		sidebarResize.disconnect();
 		panelSidebar = sidebar;
 		if (sidebar) sidebarResize.observe(sidebar);
@@ -387,11 +421,32 @@
 	// The report page navigated (e.g. from the list to a report): keep the highlight and the URL in step
 	function followPanelRoute(path) {
 		if (activeKey === null || typeof path !== "string") return;
+		if (/^\/dashboard\/?$/.test(path)) return; // one page: nothing to follow
 		const match = /^\/reports(?:\/([^/]+))?\/?$/.exec(path);
 		if (!match) return;
 		activeKey = match[1] ? `report:${decodeURIComponent(match[1])}` : HUB_KEY;
 		syncItemsState();
 		writePanelToUrl(activeKey);
+	}
+
+	// The dashboard's filters changed: keep them in CRM's URL
+	function followPanelQuery(query) {
+		if (activeKey !== DASHBOARD_KEY) return;
+		panelQuery = cleanQuery(query);
+		writePanelToUrl(activeKey);
+	}
+
+	// only plain key=value text ever reaches the panel's URL
+	function cleanQuery(query) {
+		if (!query) return "";
+		const params = new URLSearchParams(typeof query === "string" ? query : undefined);
+		if (typeof query === "object") {
+			for (const [key, value] of Object.entries(query)) {
+				if (typeof value === "string") params.set(key, value);
+			}
+		}
+		params.delete("embed");
+		return params.toString();
 	}
 
 	// Messages from the report page (same origin only)
@@ -402,6 +457,7 @@
 		if (type === "pranera:close-panel") closePanel();
 		else if (type === "pranera:pins-changed") loadPins();
 		else if (type === "pranera:panel-route") followPanelRoute(data.path);
+		else if (type === "pranera:panel-query") followPanelQuery(data.query);
 		else if (
 			type === "pranera:open-crm" &&
 			typeof data.path === "string" &&
