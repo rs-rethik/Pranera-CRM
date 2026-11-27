@@ -4,6 +4,12 @@ export const router = createRouter({
 	history: createWebHistory('/deal_wizard/'),
 	routes: [
 		{ path: '/', name: 'Home', component: () => import('@/pages/Home.vue') },
+		// shown inside CRM by pranera_crm/public/js/crm_sidebar_ext.js
+		{
+			path: '/dashboard',
+			name: 'DealDashboard',
+			component: () => import('@/pages/DealDashboard.vue'),
+		},
 		{
 			path: '/:name',
 			name: 'Wizard',

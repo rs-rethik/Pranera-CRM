@@ -10,5 +10,85 @@
   "default": "1",
   "insert_after": "enable_sales_hierarchy",
   "description": "When enabled, Convert to Deal on a lead opens the step-by-step wizard (Pranera CRM). When disabled, CRM's standard Convert to Deal dialog is used."
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "CRM Products-custom_uom",
+  "dt": "CRM Products",
+  "fieldname": "custom_uom",
+  "label": "UOM",
+  "fieldtype": "Data",
+  "insert_after": "qty",
+  "fetch_from": "custom_item_code.stock_uom",
+  "modified": "2026-09-17 17:23:58.733315"
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "CRM Products-custom_item_code",
+  "dt": "CRM Products",
+  "fieldname": "custom_item_code",
+  "label": "Item Code",
+  "fieldtype": "Link",
+  "options": "Item",
+  "insert_after": "product_code",
+  "in_list_view": 1,
+  "modified": "2026-10-21 16:21:52.099624"
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "CRM Organization-custom_customer",
+  "dt": "CRM Organization",
+  "fieldname": "custom_customer",
+  "label": "Customer",
+  "fieldtype": "Link",
+  "options": "Customer",
+  "insert_after": "custom_sales_person",
+  "in_list_view": 1,
+  "modified": "2025-10-25 17:30:45.318449"
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "CRM Organization-custom_sales_person",
+  "dt": "CRM Organization",
+  "fieldname": "custom_sales_person",
+  "label": "Sales Person",
+  "fieldtype": "Link",
+  "options": "Sales Person",
+  "insert_after": "address",
+  "modified": "2025-10-18 12:46:12.871282"
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "CRM Deal-custom_customer",
+  "dt": "CRM Deal",
+  "fieldname": "custom_customer",
+  "label": "Customer",
+  "fieldtype": "Link",
+  "options": "Customer",
+  "insert_after": "organization",
+  "modified": "2026-05-15 07:02:45.215369"
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "CRM Deal-custom_sales_person",
+  "dt": "CRM Deal",
+  "fieldname": "custom_sales_person",
+  "label": "Sales Person",
+  "fieldtype": "Link",
+  "options": "Sales Person",
+  "insert_after": "deal_owner",
+  "in_standard_filter": 1,
+  "modified": "2026-08-18 15:51:42.814206"
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "Sales Order-custom_crm_deal",
+  "dt": "Sales Order",
+  "fieldname": "custom_crm_deal",
+  "label": "CRM Deal",
+  "fieldtype": "Link",
+  "options": "CRM Deal",
+  "insert_after": "custom_allowance_",
+  "modified": "2026-06-29 16:48:27.091999"
  }
 ]

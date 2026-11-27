@@ -22,8 +22,9 @@ def get_context(context):
 	if not check_app_permission():
 		frappe.throw(_("You do not have permission to access Frappe CRM"), frappe.PermissionError)
 
-	if not is_wizard_enabled():
+	if not is_wizard_enabled() and not is_dashboard_request():
 		# "Enable Convert to Deal Wizard" is off in CRM Settings: use CRM's own flow.
+		# The Deal Dashboard shares this SPA but isn't part of the wizard, so it stays reachable.
 		redirect_to(crm_url_for_request())
 
 	context.boot = get_boot()
@@ -37,6 +38,12 @@ def crm_url_for_request() -> str:
 	if len(parts) >= 2 and parts[0] == "deal_wizard":
 		return f"/crm/leads/{quote(unquote(parts[1]), safe='')}"
 	return "/crm"
+
+
+def is_dashboard_request() -> bool:
+	"""/deal_wizard/dashboard, which crm_sidebar_ext.js shows inside CRM."""
+	parts = [p for p in frappe.local.request.path.split("/") if p]
+	return parts[:2] == ["deal_wizard", "dashboard"]
 
 
 def redirect_to(location: str):

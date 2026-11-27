@@ -12,12 +12,19 @@ export {}
 declare module 'vue' {
   export interface GlobalComponents {
     CandidateList: typeof import('./src/components/CandidateList.vue')['default']
+    ChangeBadge: typeof import('./src/components/dashboard/ChangeBadge.vue')['default']
+    ChartCard: typeof import('./src/components/dashboard/ChartCard.vue')['default']
+    ConversionSteps: typeof import('./src/components/dashboard/ConversionSteps.vue')['default']
     FieldControl: typeof import('./src/components/FieldControl.vue')['default']
+    FilterBar: typeof import('./src/components/dashboard/FilterBar.vue')['default']
+    KpiCard: typeof import('./src/components/dashboard/KpiCard.vue')['default']
     MultiLinkSelect: typeof import('./src/components/MultiLinkSelect.vue')['default']
+    PersonTable: typeof import('./src/components/dashboard/PersonTable.vue')['default']
     QuestionField: typeof import('./src/components/QuestionField.vue')['default']
     ReviewCard: typeof import('./src/components/ReviewCard.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
+    RowsTable: typeof import('./src/components/dashboard/RowsTable.vue')['default']
     StepDots: typeof import('./src/components/StepDots.vue')['default']
   }
 }

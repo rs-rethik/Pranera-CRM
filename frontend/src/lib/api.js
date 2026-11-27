@@ -114,3 +114,35 @@ export function errorMessage(err) {
 	const first = (err?.messages || []).map(stripHtml).find(Boolean)
 	return first || __('Something went wrong. Please try again.')
 }
+
+/**
+ * A read through GET, for whitelisted methods that allow nothing else. Errors
+ * have the shape of frappe-ui's `call` errors, so `errorMessage` reads them.
+ */
+export async function apiGet(method, params = {}) {
+	const query = new URLSearchParams()
+	for (const [key, value] of Object.entries(params)) {
+		if (value !== null && value !== undefined && value !== '') query.set(key, value)
+	}
+	const res = await fetch(`/api/method/${method}?${query}`, {
+		credentials: 'same-origin',
+		headers: { Accept: 'application/json' },
+	})
+	const data = await res.json().catch(() => ({}))
+	if (res.ok) return data.message
+	if (res.status === 401 || res.status === 403) {
+		if ((await loggedUser()) === 'Guest') {
+			redirectToLogin()
+			return navigating()
+		}
+	}
+	throw { status: res.status, exc_type: data.exc_type, messages: serverMessages(data) }
+}
+
+function serverMessages(data) {
+	try {
+		return JSON.parse(data._server_messages || '[]').map((raw) => JSON.parse(raw).message)
+	} catch {
+		return []
+	}
+}
