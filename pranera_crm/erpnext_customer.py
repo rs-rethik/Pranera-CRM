@@ -65,11 +65,6 @@ def lookup_gstin(gstin: str) -> dict:
 	API again, and rate-limited (20 lookups per 5 minutes per user/IP) so this
 	whitelisted endpoint can't be used to probe an unbounded list of GSTINs.
 	"""
-	try:
-		from india_compliance.gst_india.utils.gstin_info import get_gstin_info
-	except ImportError:
-		frappe.throw(_("GSTIN lookup needs the India Compliance app, which isn't installed."))
-
 	if not frappe.has_permission(CUSTOMER, "read"):
 		frappe.throw(_("Not allowed"), frappe.PermissionError)
 
@@ -78,7 +73,8 @@ def lookup_gstin(gstin: str) -> dict:
 	if cached is not None:
 		return cached
 
-	info = get_gstin_info(gstin, throw_error=True)
+	remote = frappe.conf.get("gstin_lookup_site")
+	info = _remote_gstin_info(remote, gstin) if remote else _local_gstin_info(gstin)
 	address = info.get("permanent_address") or {}
 	result = {
 		"business_name": info.get("business_name") or "",
@@ -95,6 +91,39 @@ def lookup_gstin(gstin: str) -> dict:
 	}
 	frappe.cache.set_value(cache_key, result, expires_in_sec=GSTIN_LOOKUP_CACHE_TTL)
 	return result
+
+
+def _local_gstin_info(gstin: str) -> dict:
+	try:
+		from india_compliance.gst_india.utils.gstin_info import get_gstin_info
+	except ImportError:
+		frappe.throw(_("GSTIN lookup needs the India Compliance app, which isn't installed."))
+	return get_gstin_info(gstin, throw_error=True)
+
+
+def _remote_gstin_info(remote: dict, gstin: str) -> dict:
+	"""Development only: ask another site's India Compliance to look the GSTIN up, with that site's
+	API key. Used only when this site's site_config.json has ``gstin_lookup_site``
+	({"url", "api_key", "api_secret"}); test and production sites don't set it."""
+	import requests
+
+	url = (remote.get("url") or "").rstrip("/")
+	if not (url and remote.get("api_key") and remote.get("api_secret")):
+		frappe.throw(_("gstin_lookup_site in site_config.json needs url, api_key and api_secret."))
+	try:
+		response = requests.get(
+			f"{url}/api/method/india_compliance.gst_india.utils.gstin_info.get_gstin_info",
+			params={"gstin": gstin},
+			headers={"Authorization": f"token {remote['api_key']}:{remote['api_secret']}"},
+			timeout=30,
+		)
+	except requests.RequestException:
+		frappe.log_error("GSTIN lookup site unreachable")
+		frappe.throw(_("The GSTIN lookup site {0} couldn't be reached. Try again.").format(url))
+	body = response.json() if response.headers.get("content-type", "").startswith("application/json") else {}
+	if not response.ok:
+		frappe.throw(body.get("exception", "").split(": ", 1)[-1] or _("The GSTIN lookup failed. Try again."))
+	return body.get("message") or {}
 
 
 @frappe.whitelist()
@@ -364,8 +393,6 @@ def create(
 		customer.disabled = 1
 
 	contact_name = _primary_contact_name(deal_doc)
-	if contact_name and not customer.customer_primary_contact:
-		customer.customer_primary_contact = contact_name
 
 	if frappe.get_meta(CUSTOMER).has_field("crm_deal"):
 		customer.crm_deal = deal
@@ -390,6 +417,12 @@ def create(
 		_apply_contact_updates(
 			contact_name, contact_result["fields"].get(CONTACT, {}), linked_customer=customer.name
 		)
+		# only now, once the contact is linked to the customer: ERPNext refuses a primary contact
+		# that isn't (Customer.validate_primary_contact_and_address)
+		if not customer.customer_primary_contact:
+			customer.reload()
+			customer.customer_primary_contact = contact_name
+			customer.save()
 
 	if frappe.get_meta(DEAL).has_field("erpnext_customer"):
 		frappe.db.set_value(DEAL, deal, "erpnext_customer", customer.name)
